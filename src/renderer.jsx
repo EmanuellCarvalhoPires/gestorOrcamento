@@ -6,9 +6,18 @@ import TransactionTable from './components/TransactionTable';
 import DonutChart from './components/DonutChart';
 import SummaryCards from './components/SummaryCards';
 import AddExpenseModal from './components/AddExpenseModal';
-import { BudgetProvider } from './contexts/BudgetContext';
+import AuthView from './components/AuthView';
+import UserProfileHeader from './components/UserProfileHeader';
+import { BudgetProvider, useBudget } from './contexts/BudgetContext';
 
 const MainLayout = () => {
+  const { usuarioLogado } = useBudget();
+
+  // Se não houver usuário logado, exibe a tela de Login / Registro
+  if (!usuarioLogado) {
+    return <AuthView />;
+  }
+
   return (
     <div
       style={{
@@ -23,8 +32,11 @@ const MainLayout = () => {
         boxSizing: 'border-box',
       }}
     >
-      {/* 1. Barra Superior de Anos */}
-      <YearSelector />
+      {/* Cabeçalho Principal: Barra de Anos à esquerda + Perfil do Usuário à direita */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <YearSelector />
+        <UserProfileHeader />
+      </div>
 
       {/* 2. Barra de Seleção de Meses */}
       <MonthSelector />

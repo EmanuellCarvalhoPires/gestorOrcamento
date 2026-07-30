@@ -1,0 +1,42 @@
+====================================================================
+           PASSO A PASSO PARA CONECTAR NA VM ORACLE CLOUD
+====================================================================
+
+IP PUBLICO DA VM: 147.15.21.81
+USUARIO LINUX: ubuntu
+ARQUIVO DA CHAVE: ssh-key-2026-07-30.key
+
+--------------------------------------------------------------------
+PASSO 1: ABRIR O POWERSHELL NO WINDOWS
+--------------------------------------------------------------------
+1. Pressione as teclas Win + R, digite powershell e aperte Enter.
+
+--------------------------------------------------------------------
+PASSO 2: IR ATE A PASTA DO PROJETO (ONDE ESTA A CHAVE .KEY)
+--------------------------------------------------------------------
+Copie e cole o comando abaixo no PowerShell:
+
+cd C:\Users\Trabalho\Documents\gestorOrcamento
+
+--------------------------------------------------------------------
+PASSO 3: CORRIGIR PERMISSOES DA CHAVE NO WINDOWS (SE NECESSARIO)
+--------------------------------------------------------------------
+Copie e cole o comando abaixo no PowerShell:
+
+icacls "ssh-key-2026-07-30.key" /inheritance:r /grant:r "$($env:USERNAME):R"
+
+--------------------------------------------------------------------
+PASSO 4: CONECTAR VIA SSH NA VM ORACLE
+--------------------------------------------------------------------
+Copie e cole o comando de conexao abaixo no PowerShell:
+
+ssh -i "ssh-key-2026-07-30.key" ubuntu@147.15.21.81
+
+--------------------------------------------------------------------
+PRONTO!
+--------------------------------------------------------------------
+Quando o terminal exibir "ubuntu@gestorc:~$", voce estara dentro do
+seu servidor na nuvem Oracle.
+
+Para sair do servidor Linux a qualquer momento, digite: exit
+====================================================================

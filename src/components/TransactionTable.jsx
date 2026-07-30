@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
+import iconLixeira from '../../images/lixeira-de-reciclagem.png';
+import DeleteConfirmModal from './DeleteConfirmModal';
+import EditExpenseModal from './EditExpenseModal';
 
 export default function TransactionTable() {
   const {
@@ -7,11 +10,50 @@ export default function TransactionTable() {
     setAbaAtiva,
     transacoesTabela,
     setIsModalOpen,
-    totalDespesas,
     totalReceitas,
+    totalDespesas,
+    editarTransacao,
+    deletarTransacao,
   } = useBudget();
 
-  const totalExibido = abaAtiva === 'despesas' ? totalDespesas : totalReceitas;
+  const [buscaTexto, setBuscaTexto] = useState('');
+  const [itemParaDeletar, setItemParaDeletar] = useState(null);
+  const [itemParaEditar, setItemParaEditar] = useState(null);
+
+  const totalExibido = abaAtiva === 'receitas' ? totalReceitas : totalDespesas;
+
+  // Filtro de Busca em Tempo Real por Nome, Etiqueta ou Classificação
+  const transacoesFiltradasPelaBusca = transacoesTabela.filter((t) => {
+    if (!buscaTexto.trim()) return true;
+    const termo = buscaTexto.toLowerCase().trim();
+    return (
+      (t.nome && t.nome.toLowerCase().includes(termo)) ||
+      (t.etiqueta && t.etiqueta.toLowerCase().includes(termo)) ||
+      (t.classificacao && t.classificacao.toLowerCase().includes(termo))
+    );
+  });
+
+  const handleConfirmDelete = async ({ deletarModo, parcelaNum, ehFixa, mes }) => {
+    if (itemParaDeletar) {
+      await deletarTransacao(itemParaDeletar.id, {
+        deletarModo,
+        parcelaNum,
+        ehFixa: itemParaDeletar.eh_fixa === 1 || ehFixa,
+        mes: itemParaDeletar.mes || mes,
+        nome: itemParaDeletar.nome,
+        tipo: abaAtiva,
+      });
+      setItemParaDeletar(null);
+    }
+  };
+
+  const handleSaveEdit = async (dadosEdicao) => {
+    await editarTransacao({
+      ...dadosEdicao,
+      tipo: abaAtiva,
+    });
+    setItemParaEditar(null);
+  };
 
   return (
     <div
@@ -25,10 +67,10 @@ export default function TransactionTable() {
         flex: 1,
       }}
     >
-      {/* Topo: Alternador de Abas + Botão (+) + Totalizador */}
+      {/* Topo: Alternador de Abas + Campo de Busca + Botão (+) + Totalizador */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         
-        {/* Abas Alternadoras */}
+        {/* As 2 Abas Alternadoras */}
         <div style={{ display: 'flex', gap: '6px', backgroundColor: '#3e3e3e', padding: '4px', borderRadius: '24px' }}>
           <button
             onClick={() => setAbaAtiva('receitas')}
@@ -38,6 +80,7 @@ export default function TransactionTable() {
               border: 'none',
               cursor: 'pointer',
               fontWeight: 'bold',
+              fontSize: '14px',
               backgroundColor: abaAtiva === 'receitas' ? '#666666' : 'transparent',
               color: abaAtiva === 'receitas' ? '#ffe192' : '#aaaaaa',
               transition: 'all 0.2s',
@@ -45,6 +88,7 @@ export default function TransactionTable() {
           >
             Receita do Mês
           </button>
+
           <button
             onClick={() => setAbaAtiva('despesas')}
             style={{
@@ -53,6 +97,7 @@ export default function TransactionTable() {
               border: 'none',
               cursor: 'pointer',
               fontWeight: 'bold',
+              fontSize: '14px',
               backgroundColor: abaAtiva === 'despesas' ? '#666666' : 'transparent',
               color: abaAtiva === 'despesas' ? '#ffe192' : '#aaaaaa',
               transition: 'all 0.2s',
@@ -62,8 +107,46 @@ export default function TransactionTable() {
           </button>
         </div>
 
-        {/* Botão (+) e Valor Total Exibido */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Campo de Pesquisa, Botão (+) e Totalizador */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Campo de Pesquisa */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={buscaTexto}
+              onChange={(e) => setBuscaTexto(e.target.value)}
+              placeholder="🔍 Buscar lançamento..."
+              style={{
+                padding: '8px 30px 8px 14px',
+                borderRadius: '20px',
+                border: '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffffff',
+                fontSize: '13px',
+                outline: 'none',
+                width: '180px',
+              }}
+            />
+            {buscaTexto && (
+              <button
+                onClick={() => setBuscaTexto('')}
+                title="Limpar busca"
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#aaaaaa',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Botão (+) */}
           <button
             onClick={() => setIsModalOpen(true)}
             title="Adicionar lançamento"
@@ -86,6 +169,7 @@ export default function TransactionTable() {
             +
           </button>
           
+          {/* Totalizador */}
           <div
             style={{
               backgroundColor: '#666666',
@@ -96,7 +180,7 @@ export default function TransactionTable() {
               fontSize: '16px',
             }}
           >
-            R$ {totalExibido.toLocaleString('pt-BR')}
+            R$ {totalExibido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </div>
         </div>
       </div>
@@ -109,19 +193,43 @@ export default function TransactionTable() {
               <th style={{ padding: '12px 16px', borderTopLeftRadius: '6px' }}>Nome</th>
               <th style={{ padding: '12px 16px' }}>Classificação</th>
               <th style={{ padding: '12px 16px' }}>Etiqueta</th>
-              <th style={{ padding: '12px 16px' }}>Num. de Parcelas</th>
-              <th style={{ padding: '12px 16px', borderTopRightRadius: '6px' }}>Valor</th>
+              <th style={{ padding: '12px 16px' }}>
+                {abaAtiva === 'receitas' ? 'Recorrência' : 'Num. de Parcelas'}
+              </th>
+              <th style={{ padding: '12px 16px' }}>Valor</th>
+              <th style={{ padding: '12px 16px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {transacoesTabela.length === 0 ? (
+            {transacoesFiltradasPelaBusca.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ padding: '32px', textAlign: 'center', color: '#cccccc' }}>
-                  Nenhuma transação cadastrada para este mês/ano.
+                <td colSpan="6" style={{ padding: '32px', textAlign: 'center', color: '#cccccc' }}>
+                  {buscaTexto
+                    ? `Nenhum lançamento encontrado para "${buscaTexto}".`
+                    : 'Nenhuma transação cadastrada para este mês/ano.'}
+                  {buscaTexto && (
+                    <div style={{ marginTop: '8px' }}>
+                      <button
+                        onClick={() => setBuscaTexto('')}
+                        style={{
+                          backgroundColor: '#737373',
+                          color: '#ffe192',
+                          border: 'none',
+                          padding: '6px 16px',
+                          borderRadius: '16px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '12px',
+                        }}
+                      >
+                        Limpar Busca
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
-              transacoesTabela.map((item, index) => (
+              transacoesFiltradasPelaBusca.map((item, index) => (
                 <tr
                   key={item.id}
                   style={{
@@ -132,9 +240,55 @@ export default function TransactionTable() {
                   <td style={{ padding: '12px 16px', fontWeight: '500' }}>{item.nome}</td>
                   <td style={{ padding: '12px 16px', color: '#dddddd' }}>{item.classificacao}</td>
                   <td style={{ padding: '12px 16px', color: '#dddddd' }}>{item.etiqueta}</td>
-                  <td style={{ padding: '12px 16px', color: '#dddddd' }}>{item.parcelas}</td>
+                  <td style={{ padding: '12px 16px', color: '#dddddd' }}>
+                    {item.eh_fixa === 1 ? 'Fixa' : item.parcelas}
+                  </td>
                   <td style={{ padding: '12px 16px', color: '#ffe192', fontWeight: 'bold' }}>
-                    R$ {Number(item.valor).toLocaleString('pt-BR')}
+                    R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      {/* Botão de Editar ✏️ */}
+                      <button
+                        onClick={() => setItemParaEditar(item)}
+                        title="Editar lançamento"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          fontSize: '16px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'transform 0.1s',
+                        }}
+                      >
+                        ✏️
+                      </button>
+
+                      {/* Botão de Excluir 🗑️ */}
+                      <button
+                        onClick={() => setItemParaDeletar(item)}
+                        title="Excluir lançamento"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'transform 0.1s',
+                        }}
+                      >
+                        <img
+                          src={iconLixeira}
+                          alt="Excluir"
+                          style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                        />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -142,6 +296,22 @@ export default function TransactionTable() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal Customizado de Edição */}
+      <EditExpenseModal
+        isOpen={!!itemParaEditar}
+        item={itemParaEditar}
+        onClose={() => setItemParaEditar(null)}
+        onSave={handleSaveEdit}
+      />
+
+      {/* Modal Customizado de Confirmação de Exclusão */}
+      <DeleteConfirmModal
+        isOpen={!!itemParaDeletar}
+        item={itemParaDeletar}
+        onClose={() => setItemParaDeletar(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

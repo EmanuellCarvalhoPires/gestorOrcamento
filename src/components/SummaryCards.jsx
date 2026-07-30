@@ -4,6 +4,13 @@ import { useBudget } from '../contexts/BudgetContext';
 export default function SummaryCards() {
   const { totalReceitas, totalDespesas, economia } = useBudget();
 
+  const formatarMoeda = (valor) => {
+    return (Number(valor) || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
       {/* Card Receita */}
@@ -19,7 +26,7 @@ export default function SummaryCards() {
           boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
         }}
       >
-        Receita: R$ {totalReceitas.toLocaleString('pt-BR')}
+        Receita: R$ {formatarMoeda(totalReceitas)}
       </div>
 
       {/* Card Despesas */}
@@ -35,7 +42,7 @@ export default function SummaryCards() {
           boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
         }}
       >
-        Despesas: R$ {totalDespesas.toLocaleString('pt-BR')}
+        Despesas: R$ {formatarMoeda(totalDespesas)}
       </div>
 
       {/* Card Economia */}
@@ -51,7 +58,7 @@ export default function SummaryCards() {
           boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
         }}
       >
-        Economia: R$ {economia.toLocaleString('pt-BR')}
+        Economia: R$ {formatarMoeda(economia)}
       </div>
     </div>
   );
