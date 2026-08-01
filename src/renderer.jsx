@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import YearSelector from './components/YearSelector';
 import MonthSelector from './components/MonthSelector';
@@ -6,9 +6,75 @@ import TransactionTable from './components/TransactionTable';
 import DonutChart from './components/DonutChart';
 import SummaryCards from './components/SummaryCards';
 import AddExpenseModal from './components/AddExpenseModal';
+import CategoryManagerModal from './components/CategoryManagerModal';
 import AuthView from './components/AuthView';
 import UserProfileHeader from './components/UserProfileHeader';
 import { BudgetProvider, useBudget } from './contexts/BudgetContext';
+import appIcon from '../images/app_icon.jpg';
+
+// Error Boundary para capturar e exibir qualquer erro de runtime
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('CRASH CAPTURADO PELO ERROR BOUNDARY:', error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            padding: '32px',
+            backgroundColor: '#2b1d1d',
+            color: '#ff8585',
+            fontFamily: 'monospace',
+            minHeight: '100vh',
+            boxSizing: 'border-box',
+          }}
+        >
+          <h2 style={{ color: '#ff4d4d', marginTop: 0 }}>⚠️ Ocorreu um erro no aplicativo!</h2>
+          <div style={{ backgroundColor: '#1a1010', padding: '16px', borderRadius: '8px', border: '1px solid #ff4d4d' }}>
+            <strong>Erro:</strong> {this.state.error?.toString()}
+          </div>
+          <details style={{ marginTop: '16px', color: '#cccccc', cursor: 'pointer' }}>
+            <summary style={{ fontWeight: 'bold' }}>Ver detalhes da pilha (Stack Trace)</summary>
+            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', marginTop: '10px' }}>
+              {this.state.errorInfo?.componentStack || this.state.error?.stack}
+            </pre>
+          </details>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              window.location.reload();
+            }}
+            style={{
+              marginTop: '20px',
+              padding: '10px 20px',
+              backgroundColor: '#e76f51',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            🔄 Limpar Cache e Reiniciar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const MainLayout = () => {
   const { usuarioLogado } = useBudget();
@@ -32,9 +98,38 @@ const MainLayout = () => {
         boxSizing: 'border-box',
       }}
     >
-      {/* Cabeçalho Principal: Barra de Anos à esquerda + Perfil do Usuário à direita */}
+      {/* Topo do App: Logo Centralizada na Moldura + Anos (Esquerda) + Perfil (Direita) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <YearSelector />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Logo com Emblema Perfeitamente Centralizado e Ampliado na Moldura */}
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              border: '2px solid #ffe192',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#1e1e1e',
+            }}
+          >
+            <img
+              src={appIcon}
+              alt="Gestor de Orçamento"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          </div>
+
+          <YearSelector />
+        </div>
+
         <UserProfileHeader />
       </div>
 
@@ -71,15 +166,20 @@ const MainLayout = () => {
 
       {/* Modal de Cadastro de Lançamento */}
       <AddExpenseModal />
+
+      {/* Modal de Gerenciamento de Categorias */}
+      <CategoryManagerModal />
     </div>
   );
 };
 
 const App = () => {
   return (
-    <BudgetProvider>
-      <MainLayout />
-    </BudgetProvider>
+    <ErrorBoundary>
+      <BudgetProvider>
+        <MainLayout />
+      </BudgetProvider>
+    </ErrorBoundary>
   );
 };
 

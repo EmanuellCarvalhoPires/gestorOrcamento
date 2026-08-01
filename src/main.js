@@ -3,8 +3,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 import dotenv from 'dotenv';
-import { createClient } from '@libsql/client/web';
 import crypto from 'node:crypto';
+import pg from 'pg';
+
+const { Pool } = pg;
 
 // Remove a barra de menu nativa padrão (File, Edit, View, Window)
 Menu.setApplicationMenu(null);
@@ -17,12 +19,13 @@ if (started) {
   app.quit();
 }
 
-const dbUrl = process.env.TURSO_DATABASE_URL || '';
-const dbToken = process.env.TURSO_AUTH_TOKEN || '';
-
-const turso = createClient({
-  url: dbUrl || 'https://placeholder.turso.io',
-  authToken: dbToken,
+const pool = new Pool({
+  host: process.env.PG_HOST || '147.15.21.81',
+  port: parseInt(process.env.PG_PORT || '5432', 10),
+  database: process.env.PG_DATABASE || 'gestor_orcamento',
+  user: process.env.PG_USER || 'postgres',
+  password: process.env.PG_PASSWORD || 'admin123',
+  connectionTimeoutMillis: 10000,
 });
 
 // Hashing de senha seguro via PBKDF2 com Salt
@@ -44,8 +47,8 @@ function getNomeTabela(tipo) {
   return 'despesas';
 }
 
-// Categorias padrão para finanças pessoais
-const CATEGORIAS_PADRAO = [
+// Categorias padrão para finanças pessoas físicas
+const CATEGORIAS_INDIVIDUAL = [
   { nome: 'Alimentação', cor: '#fb8500' },
   { nome: 'Moradia', cor: '#ffb703' },
   { nome: 'Transporte', cor: '#ffd166' },
@@ -56,93 +59,164 @@ const CATEGORIAS_PADRAO = [
   { nome: 'Outros', cor: '#8d99ae' },
 ];
 
-// Inicializa as 2 tabelas principais (receitas e despesas) e categorias
-async function initDatabase() {
-  if (!dbUrl) return;
+// Categorias padrão para perfil comercial / empresas
+const CATEGORIAS_COMERCIAL = [
+  { nome: 'Vendas & Produtos', cor: '#2a9d8f' },
+  { nome: 'Fornecedores & Estoque', cor: '#e76f51' },
+  { nome: 'Serviços Prestados', cor: '#fb8500' },
+  { nome: 'Aluguel & Infraestrutura', cor: '#ffb703' },
+  { nome: 'Manutenção & Equipamentos', cor: '#ffd166' },
+  { nome: 'Marketing & Anúncios', cor: '#f4a261' },
+  { nome: 'Pessoal & RH', cor: '#e07a5f' },
+  { nome: 'Impostos & Taxas', cor: '#457b9d' },
+  { nome: 'Outros', cor: '#8d99ae' },
+];
+
+const ETIQUETAS_PADRAO = ['Geral', 'Fixa', 'Variável', 'Urgente', 'Investimento'];
+
+function getCategoriasPadrao(perfilUso) {
+  return perfilUso === 'comercial' ? CATEGORIAS_COMERCIAL : CATEGORIAS_INDIVIDUAL;
+}
+
+async function salvarEtiquetaSeNova(usuarioId, etiquetaNome) {
+  if (!usuarioId || !etiquetaNome || !etiquetaNome.trim()) return;
+  const nomeLimpo = etiquetaNome.trim();
 
   try {
+    const check = await pool.query(
+      'SELECT id FROM etiquetas WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))',
+      [usuarioId, nomeLimpo]
+    );
+
+    if (check.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
+        [usuarioId, nomeLimpo]
+      );
+    }
+  } catch (err) {
+    console.error('Erro ao salvar nova etiqueta:', err);
+  }
+}
+
+// Inicializa as tabelas no PostgreSQL da Oracle Cloud
+async function initDatabase() {
+  try {
     // 1. Tabela de Usuários
-    await turso.execute(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS usuarios (
-        id TEXT PRIMARY KEY,
-        nome TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        senha_hash TEXT NOT NULL,
+        id VARCHAR(100) PRIMARY KEY,
+        nome VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        senha_hash VARCHAR(255) NOT NULL,
+        perfil_uso VARCHAR(50) DEFAULT 'individual',
         avatar_url TEXT,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // 2. Tabela de Categorias
-    await turso.execute(`
+    // 2. Tabela de Contas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contas (
+        id SERIAL PRIMARY KEY,
+        usuario_id VARCHAR(100) NOT NULL,
+        nome VARCHAR(255) NOT NULL,
+        tipo VARCHAR(50) DEFAULT 'individual',
+        descricao TEXT,
+        cor VARCHAR(50) DEFAULT '#ffe192',
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+      );
+    `);
+
+    // 3. Tabela de Categorias
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS categorias (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id TEXT NOT NULL,
-        nome TEXT NOT NULL,
-        cor TEXT DEFAULT '#ffe192',
+        id SERIAL PRIMARY KEY,
+        usuario_id VARCHAR(100) NOT NULL,
+        nome VARCHAR(255) NOT NULL,
+        cor VARCHAR(50) DEFAULT '#ffe192',
         FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
       );
     `);
 
-    // 3. Tabela de Receitas
-    await turso.execute(`
+    // 4. Tabela de Etiquetas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS etiquetas (
+        id SERIAL PRIMARY KEY,
+        usuario_id VARCHAR(100) NOT NULL,
+        nome VARCHAR(255) NOT NULL,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+      );
+    `);
+
+    // 5. Tabela de Receitas
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS receitas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id TEXT NOT NULL,
-        nome TEXT NOT NULL,
-        valor REAL NOT NULL,
-        classificacao TEXT DEFAULT 'Outros',
-        etiqueta TEXT DEFAULT 'Geral',
-        parcelas TEXT DEFAULT '1/1',
-        eh_fixa INTEGER DEFAULT 0,
+        id SERIAL PRIMARY KEY,
+        usuario_id VARCHAR(100) NOT NULL,
+        conta_id INT,
+        nome VARCHAR(255) NOT NULL,
+        valor NUMERIC(15,2) NOT NULL,
+        classificacao VARCHAR(100) DEFAULT 'Outros',
+        etiqueta VARCHAR(100) DEFAULT 'Geral',
+        parcelas VARCHAR(50) DEFAULT '1/1',
+        eh_fixa INT DEFAULT 0,
         descricao TEXT,
-        mes TEXT NOT NULL,
-        ano TEXT NOT NULL,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        mes VARCHAR(20) NOT NULL,
+        ano VARCHAR(10) NOT NULL,
+        data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+        FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
       );
     `);
 
-    // 4. Tabela de Despesas
-    await turso.execute(`
+    // 6. Tabela de Despesas
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS despesas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id TEXT NOT NULL,
-        nome TEXT NOT NULL,
-        valor REAL NOT NULL,
-        classificacao TEXT DEFAULT 'Outros',
-        etiqueta TEXT DEFAULT 'Geral',
-        parcelas TEXT DEFAULT '1/1',
-        eh_fixa INTEGER DEFAULT 0,
+        id SERIAL PRIMARY KEY,
+        usuario_id VARCHAR(100) NOT NULL,
+        conta_id INT,
+        nome VARCHAR(255) NOT NULL,
+        valor NUMERIC(15,2) NOT NULL,
+        classificacao VARCHAR(100) DEFAULT 'Outros',
+        etiqueta VARCHAR(100) DEFAULT 'Geral',
+        parcelas VARCHAR(50) DEFAULT '1/1',
+        eh_fixa INT DEFAULT 0,
         descricao TEXT,
-        mes TEXT NOT NULL,
-        ano TEXT NOT NULL,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+        mes VARCHAR(20) NOT NULL,
+        ano VARCHAR(10) NOT NULL,
+        data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+        FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
       );
     `);
 
-    // Índices de Alta Performance
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_receitas_usuario ON receitas (usuario_id, ano, mes);`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, ano, mes);`);
+    await pool.query(`ALTER TABLE receitas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE despesas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE receitas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+    await pool.query(`ALTER TABLE despesas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 
-    console.log('✅ Banco de Dados SQL na Oracle Cloud inicializado com sucesso.');
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_receitas_usuario ON receitas (usuario_id, conta_id, ano, mes);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, conta_id, ano, mes);`);
+
+    console.log('✅ Banco de Dados PostgreSQL inicializado.');
   } catch (error) {
-    console.error('❌ Erro ao inicializar tabelas:', error);
+    console.error('❌ Erro ao inicializar tabelas PostgreSQL:', error);
   }
 }
 
 // --- IPC HANDLERS ---
 
-// Registrar Usuário
-ipcMain.handle('registrar-usuario', async (event, { nome, email, senha }) => {
-  if (!dbUrl) return { success: false, error: 'Banco de dados não configurado no .env' };
-
+ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUso = 'individual' }) => {
   try {
-    const checkEmail = await turso.execute({
-      sql: 'SELECT id FROM usuarios WHERE email = ?',
-      args: [email.toLowerCase().trim()],
-    });
+    const checkEmail = await pool.query(
+      'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [email.trim()]
+    );
 
     if (checkEmail.rows.length > 0) {
       return { success: false, error: 'Este e-mail já está cadastrado.' };
@@ -150,22 +224,38 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha }) => {
 
     const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const { hashSenha: senhaCriptografada } = hashSenha(senha);
+    const perfilFinal = perfilUso === 'comercial' ? 'comercial' : 'individual';
 
-    await turso.execute({
-      sql: 'INSERT INTO usuarios (id, nome, email, senha_hash) VALUES (?, ?, ?, ?)',
-      args: [userId, nome.trim(), email.toLowerCase().trim(), senhaCriptografada],
-    });
+    await pool.query(
+      'INSERT INTO usuarios (id, nome, email, senha_hash, perfil_uso) VALUES ($1, $2, $3, $4, $5)',
+      [userId, nome.trim(), email.toLowerCase().trim(), senhaCriptografada, perfilFinal]
+    );
 
-    for (const cat of CATEGORIAS_PADRAO) {
-      await turso.execute({
-        sql: 'INSERT INTO categorias (usuario_id, nome, cor) VALUES (?, ?, ?)',
-        args: [userId, cat.nome, cat.cor],
-      });
+    const nomeContaInicial = perfilFinal === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
+    const resConta = await pool.query(
+      'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [userId, nomeContaInicial, perfilFinal, 'Conta inicial padrão', '#ffe192']
+    );
+
+    const catPadrao = getCategoriasPadrao(perfilFinal);
+    for (const cat of catPadrao) {
+      await pool.query(
+        'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
+        [userId, cat.nome, cat.cor]
+      );
+    }
+
+    for (const etiq of ETIQUETAS_PADRAO) {
+      await pool.query(
+        'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
+        [userId, etiq]
+      );
     }
 
     return {
       success: true,
-      user: { id: userId, nome: nome.trim(), email: email.toLowerCase().trim() },
+      user: { id: userId, nome: nome.trim(), email: email.toLowerCase().trim(), perfilUso: perfilFinal },
+      contaInicial: resConta.rows[0],
     };
   } catch (error) {
     console.error('Erro no registro:', error);
@@ -173,30 +263,27 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha }) => {
   }
 });
 
-// Login de Usuário
 ipcMain.handle('login-usuario', async (event, { email, senha }) => {
-  if (!dbUrl) return { success: false, error: 'Banco de dados não configurado no .env' };
-
   try {
-    const result = await turso.execute({
-      sql: 'SELECT * FROM usuarios WHERE email = ?',
-      args: [email.toLowerCase().trim()],
-    });
+    const result = await pool.query(
+      'SELECT * FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [email.trim()]
+    );
 
     if (result.rows.length === 0) {
-      return { success: false, error: 'E-mail ou senha incorretos.' };
+      return { success: false, error: 'E-mail não cadastrado.' };
     }
 
     const usuario = result.rows[0];
     const senhaValida = verificarSenha(senha, usuario.senha_hash);
 
     if (!senhaValida) {
-      return { success: false, error: 'E-mail ou senha incorretos.' };
+      return { success: false, error: 'Senha incorreta.' };
     }
 
     return {
       success: true,
-      user: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+      user: { id: usuario.id, nome: usuario.nome, email: usuario.email, perfilUso: usuario.perfil_uso || 'individual' },
     };
   } catch (error) {
     console.error('Erro no login:', error);
@@ -204,55 +291,154 @@ ipcMain.handle('login-usuario', async (event, { email, senha }) => {
   }
 });
 
-// Carregar Categorias Pessoais do Usuário
-ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
-  if (!dbUrl || !usuarioId) return CATEGORIAS_PADRAO;
+ipcMain.handle('carregar-contas', async (event, { usuarioId }) => {
+  if (!usuarioId) return [];
 
   try {
-    const userCheck = await turso.execute({
-      sql: 'SELECT id FROM usuarios WHERE id = ?',
-      args: [usuarioId],
-    });
-
-    if (userCheck.rows.length === 0) {
-      return CATEGORIAS_PADRAO;
-    }
-
-    const result = await turso.execute({
-      sql: 'SELECT * FROM categorias WHERE usuario_id = ? ORDER BY id ASC',
-      args: [usuarioId],
-    });
+    const result = await pool.query(
+      'SELECT * FROM contas WHERE usuario_id = $1 ORDER BY id ASC',
+      [usuarioId]
+    );
 
     if (result.rows.length === 0) {
-      for (const cat of CATEGORIAS_PADRAO) {
-        await turso.execute({
-          sql: 'INSERT INTO categorias (usuario_id, nome, cor) VALUES (?, ?, ?)',
-          args: [usuarioId, cat.nome, cat.cor],
-        });
+      const userCheck = await pool.query('SELECT perfil_uso FROM usuarios WHERE id = $1', [usuarioId]);
+      const perfilUso = userCheck.rows[0]?.perfil_uso || 'individual';
+      const nomeConta = perfilUso === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
+
+      const resConta = await pool.query(
+        'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [usuarioId, nomeConta, perfilUso, 'Conta padrão', '#ffe192']
+      );
+
+      return resConta.rows;
+    }
+
+    return result.rows;
+  } catch (error) {
+    console.error('Erro ao carregar contas:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('criar-conta', async (event, { usuarioId, nome, tipo, descricao, cor }) => {
+  if (!usuarioId || !nome) return { success: false, error: 'Dados da conta inválidos.' };
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [usuarioId, nome.trim(), tipo || 'individual', descricao || '', cor || '#ffe192']
+    );
+
+    return { success: true, conta: result.rows[0] };
+  } catch (error) {
+    console.error('Erro ao criar conta:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('deletar-conta', async (event, { contaId, usuarioId }) => {
+  if (!usuarioId || !contaId) return { success: false, error: 'Sessão inválida.' };
+
+  try {
+    await pool.query(
+      'DELETE FROM contas WHERE id = $1 AND usuario_id = $2',
+      [contaId, usuarioId]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao deletar conta:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('carregar-etiquetas', async (event, { usuarioId }) => {
+  if (!usuarioId) return ETIQUETAS_PADRAO;
+
+  try {
+    const result = await pool.query(
+      'SELECT DISTINCT nome FROM etiquetas WHERE usuario_id = $1 ORDER BY nome ASC',
+      [usuarioId]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      for (const etiq of ETIQUETAS_PADRAO) {
+        await pool.query(
+          'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
+          [usuarioId, etiq]
+        );
       }
-      const newResult = await turso.execute({
-        sql: 'SELECT * FROM categorias WHERE usuario_id = ? ORDER BY id ASC',
-        args: [usuarioId],
-      });
+      return ETIQUETAS_PADRAO;
+    }
+
+    return result.rows.map((r) => r.nome);
+  } catch (error) {
+    console.error('Erro ao carregar etiquetas:', error);
+    return ETIQUETAS_PADRAO;
+  }
+});
+
+ipcMain.handle('adicionar-etiqueta', async (event, { usuarioId, nome }) => {
+  if (!usuarioId || !nome || !nome.trim()) return { success: false };
+
+  try {
+    await salvarEtiquetaSeNova(usuarioId, nome.trim());
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao adicionar etiqueta:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
+  if (!usuarioId) return CATEGORIAS_INDIVIDUAL;
+
+  try {
+    const userCheck = await pool.query(
+      'SELECT id, perfil_uso FROM usuarios WHERE id = $1',
+      [usuarioId]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return CATEGORIAS_INDIVIDUAL;
+    }
+
+    const perfilUso = userCheck.rows[0].perfil_uso || 'individual';
+    const catPadrao = getCategoriasPadrao(perfilUso);
+
+    const result = await pool.query(
+      'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY id ASC',
+      [usuarioId]
+    );
+
+    if (result.rows.length === 0) {
+      for (const cat of catPadrao) {
+        await pool.query(
+          'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
+          [usuarioId, cat.nome, cat.cor]
+        );
+      }
+      const newResult = await pool.query(
+        'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY id ASC',
+        [usuarioId]
+      );
       return newResult.rows;
     }
 
     return result.rows;
   } catch (error) {
     console.error('Erro ao carregar categorias:', error);
-    return CATEGORIAS_PADRAO;
+    return CATEGORIAS_INDIVIDUAL;
   }
 });
 
-// Adicionar Categoria
 ipcMain.handle('adicionar-categoria', async (event, { usuarioId, nome, cor }) => {
-  if (!dbUrl || !usuarioId) return { success: false, error: 'Sessão inválida.' };
+  if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   try {
-    await turso.execute({
-      sql: 'INSERT INTO categorias (usuario_id, nome, cor) VALUES (?, ?, ?)',
-      args: [usuarioId, nome.trim(), cor || '#ffe192'],
-    });
+    await pool.query(
+      'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
+      [usuarioId, nome.trim(), cor || '#ffe192']
+    );
     return { success: true };
   } catch (error) {
     console.error('Erro ao adicionar categoria:', error);
@@ -260,15 +446,14 @@ ipcMain.handle('adicionar-categoria', async (event, { usuarioId, nome, cor }) =>
   }
 });
 
-// Deletar Categoria
 ipcMain.handle('deletar-categoria', async (event, { id, usuarioId }) => {
-  if (!dbUrl || !usuarioId) return { success: false, error: 'Sessão inválida.' };
+  if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   try {
-    await turso.execute({
-      sql: 'DELETE FROM categorias WHERE id = ? AND usuario_id = ?',
-      args: [id, usuarioId],
-    });
+    await pool.query(
+      'DELETE FROM categorias WHERE id = $1 AND usuario_id = $2',
+      [id, usuarioId]
+    );
     return { success: true };
   } catch (error) {
     console.error('Erro ao deletar categoria:', error);
@@ -276,26 +461,37 @@ ipcMain.handle('deletar-categoria', async (event, { id, usuarioId }) => {
   }
 });
 
-// Carregar Transações (receitas e despesas)
-ipcMain.handle('carregar-transacoes', async (event, { usuarioId, mes, ano }) => {
-  if (!dbUrl || !usuarioId) return { receitas: [], despesas: [] };
+ipcMain.handle('carregar-transacoes', async (event, { usuarioId, contaId, mes, ano }) => {
+  if (!usuarioId) return { receitas: [], despesas: [] };
 
   try {
     const filtrarMes = mes && mes !== 'Todos';
+    const filtrarConta = !!contaId;
 
-    const sqlReceitas = filtrarMes
-      ? 'SELECT * FROM receitas WHERE usuario_id = ? AND ano = ? AND mes = ? ORDER BY id DESC'
-      : 'SELECT * FROM receitas WHERE usuario_id = ? AND ano = ? ORDER BY id DESC';
+    let sqlReceitas = 'SELECT * FROM receitas WHERE usuario_id = $1 AND ano = $2';
+    let sqlDespesas = 'SELECT * FROM despesas WHERE usuario_id = $1 AND ano = $2';
+    const args = [usuarioId, ano];
 
-    const sqlDespesas = filtrarMes
-      ? 'SELECT * FROM despesas WHERE usuario_id = ? AND ano = ? AND mes = ? ORDER BY id DESC'
-      : 'SELECT * FROM despesas WHERE usuario_id = ? AND ano = ? ORDER BY id DESC';
+    let paramIndex = 3;
+    if (filtrarConta) {
+      sqlReceitas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
+      sqlDespesas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
+      args.push(contaId);
+      paramIndex++;
+    }
 
-    const args = filtrarMes ? [usuarioId, ano, mes] : [usuarioId, ano];
+    if (filtrarMes) {
+      sqlReceitas += ` AND mes = $${paramIndex}`;
+      sqlDespesas += ` AND mes = $${paramIndex}`;
+      args.push(mes);
+    }
+
+    sqlReceitas += ' ORDER BY data_transacao DESC, id DESC';
+    sqlDespesas += ' ORDER BY data_transacao DESC, id DESC';
 
     const [resReceitas, resDespesas] = await Promise.all([
-      turso.execute({ sql: sqlReceitas, args }),
-      turso.execute({ sql: sqlDespesas, args }),
+      pool.query(sqlReceitas, args),
+      pool.query(sqlDespesas, args),
     ]);
 
     return {
@@ -308,9 +504,8 @@ ipcMain.handle('carregar-transacoes', async (event, { usuarioId, mes, ano }) => 
   }
 });
 
-// Adicionar Transação
 ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
-  if (!dbUrl || !novaTransacao.usuarioId) {
+  if (!novaTransacao.usuarioId) {
     return { success: false, error: 'Sessão de usuário inválida.' };
   }
 
@@ -318,42 +513,41 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
   const mesesList = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const isReceita = tabela === 'receitas';
 
-  let mesOrigem = novaTransacao.mes;
-  if (mesOrigem === 'Todos') {
-    const dataAtual = new Date();
-    mesOrigem = mesesList[dataAtual.getMonth()];
-  }
+  const dataFinal = novaTransacao.dataTransacao ? new Date(novaTransacao.dataTransacao) : new Date();
+  const mesOrigem = mesesList[dataFinal.getMonth()];
+  const anoOrigem = dataFinal.getFullYear().toString();
 
   const mesInicioIndex = mesesList.indexOf(mesOrigem);
-  const anoInicio = parseInt(novaTransacao.ano, 10);
-
-  if (mesInicioIndex === -1 || isNaN(anoInicio)) {
-    return { success: false, error: 'Mês ou ano de origem inválidos.' };
-  }
+  const anoInicio = parseInt(anoOrigem, 10);
 
   const valorInserido = parseFloat(novaTransacao.valor || 0);
+  const etiqFinal = novaTransacao.etiqueta ? novaTransacao.etiqueta.trim() : 'Geral';
+
+  await salvarEtiquetaSeNova(novaTransacao.usuarioId, etiqFinal);
 
   try {
     if (novaTransacao.ehFixa) {
       for (let m = mesInicioIndex; m < 12; m++) {
         const mesCalculado = mesesList[m];
-        await turso.execute({
-          sql: `INSERT INTO ${tabela} (usuario_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-          args: [
+        await pool.query(
+          `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11)`,
+          [
             novaTransacao.usuarioId,
+            novaTransacao.contaId || null,
             novaTransacao.nome.trim(),
             valorInserido,
             novaTransacao.classificacao || 'Outros',
-            novaTransacao.etiqueta || 'Geral',
+            etiqFinal,
             'Fixa',
             novaTransacao.descricao || '',
             mesCalculado,
-            novaTransacao.ano,
-          ],
-        });
+            anoOrigem,
+            dataFinal,
+          ]
+        );
       }
-      return { success: true };
+      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
     }
 
     const parcelaAtual = parseInt(novaTransacao.parcelaAtual || '1', 10);
@@ -374,41 +568,45 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
         const anoCalculado = (anoInicio + anosAdicionais).toString();
         const stringParcela = `${k}/${totalParcelas}`;
 
-        await turso.execute({
-          sql: `INSERT INTO ${tabela} (usuario_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano)
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-          args: [
+        await pool.query(
+          `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
+          [
             novaTransacao.usuarioId,
+            novaTransacao.contaId || null,
             novaTransacao.nome.trim(),
             valorPorParcela,
             novaTransacao.classificacao || 'Outros',
-            novaTransacao.etiqueta || 'Geral',
+            etiqFinal,
             stringParcela,
             novaTransacao.descricao || '',
             mesCalculado,
             anoCalculado,
-          ],
-        });
+            dataFinal,
+          ]
+        );
       }
-      return { success: true };
+      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
     } else {
       const stringParcela = `${parcelaAtual}/${totalParcelas}`;
-      await turso.execute({
-        sql: `INSERT INTO ${tabela} (usuario_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano)
-              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-        args: [
+      await pool.query(
+        `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
+        [
           novaTransacao.usuarioId,
+          novaTransacao.contaId || null,
           novaTransacao.nome.trim(),
           valorPorParcela,
           novaTransacao.classificacao || 'Outros',
-          novaTransacao.etiqueta || 'Geral',
+          etiqFinal,
           stringParcela,
           novaTransacao.descricao || '',
           mesOrigem,
-          novaTransacao.ano,
-        ],
-      });
-      return { success: true };
+          anoOrigem,
+          dataFinal,
+        ]
+      );
+      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
     }
   } catch (error) {
     console.error(`Erro ao adicionar em ${tabela}:`, error);
@@ -416,54 +614,100 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
   }
 });
 
-// Editar Transação
-ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, classificacao, etiqueta, descricao, tipo }) => {
-  if (!dbUrl || !usuarioId) return { success: false, error: 'Sessão inválida.' };
+ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, classificacao, etiqueta, descricao, tipo, dataTransacao, oldNome }) => {
+  if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   const tabela = getNomeTabela(tipo);
+  const mesesList = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  const dataFinal = dataTransacao ? new Date(dataTransacao) : new Date();
+  const mesOrigem = mesesList[dataFinal.getMonth()];
+  const anoOrigem = dataFinal.getFullYear().toString();
+  const nomeBusca = (oldNome || nome).trim();
+  const etiqFinal = etiqueta ? etiqueta.trim() : 'Geral';
+
+  await salvarEtiquetaSeNova(usuarioId, etiqFinal);
 
   try {
-    await turso.execute({
-      sql: `UPDATE ${tabela}
-            SET nome = ?, valor = ?, classificacao = ?, etiqueta = ?, descricao = ?
-            WHERE id = ? AND usuario_id = ?`,
-      args: [
-        nome.trim(),
-        parseFloat(valor || 0),
-        classificacao || 'Outros',
-        etiqueta || 'Geral',
-        descricao || '',
-        id,
-        usuarioId,
-      ],
-    });
-    return { success: true };
+    const resAtual = await pool.query(`SELECT parcelas, eh_fixa, nome FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
+    const itemAtual = resAtual.rows[0];
+
+    const isFixaOuParcelada = itemAtual && (itemAtual.eh_fixa === 1 || (itemAtual.parcelas && itemAtual.parcelas !== '1/1'));
+
+    if (isFixaOuParcelada && nomeBusca) {
+      await pool.query(
+        `UPDATE ${tabela}
+         SET nome = $1, classificacao = $2, etiqueta = $3, descricao = $4
+         WHERE usuario_id = $5 AND LOWER(TRIM(nome)) = LOWER(TRIM($6))`,
+        [
+          nome.trim(),
+          classificacao || 'Outros',
+          etiqFinal,
+          descricao || '',
+          usuarioId,
+          nomeBusca,
+        ]
+      );
+
+      await pool.query(
+        `UPDATE ${tabela}
+         SET valor = $1, mes = $2, ano = $3, data_transacao = $4
+         WHERE id = $5 AND usuario_id = $6`,
+        [
+          parseFloat(valor || 0),
+          mesOrigem,
+          anoOrigem,
+          dataFinal,
+          id,
+          usuarioId,
+        ]
+      );
+    } else {
+      await pool.query(
+        `UPDATE ${tabela}
+         SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5, mes = $6, ano = $7, data_transacao = $8
+         WHERE id = $9 AND usuario_id = $10`,
+        [
+          nome.trim(),
+          parseFloat(valor || 0),
+          classificacao || 'Outros',
+          etiqFinal,
+          descricao || '',
+          mesOrigem,
+          anoOrigem,
+          dataFinal,
+          id,
+          usuarioId,
+        ]
+      );
+    }
+
+    return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
   } catch (error) {
     console.error(`Erro ao editar em ${tabela}:`, error);
     return { success: false, error: error.message };
   }
 });
 
-// Deletar Transação
 ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, nome, tipo, parcelaNum, ehFixa, mes }) => {
-  if (!dbUrl || !usuarioId) return { success: false, error: 'Sessão inválida.' };
+  if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   const tabela = getNomeTabela(tipo);
   const mesesList = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
   try {
     if (deletarModo === 'todas' && nome) {
-      await turso.execute({
-        sql: `DELETE FROM ${tabela} WHERE usuario_id = ? AND LOWER(TRIM(nome)) = LOWER(TRIM(?))`,
-        args: [usuarioId, nome.trim()],
-      });
+      await pool.query(
+        `DELETE FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
+        [usuarioId, nome.trim()]
+      );
     } else if (deletarModo === 'posteriores' && nome) {
       if (ehFixa && mes) {
         const mesIndex = mesesList.indexOf(mes);
-        const result = await turso.execute({
-          sql: `SELECT id, mes FROM ${tabela} WHERE usuario_id = ? AND LOWER(TRIM(nome)) = LOWER(TRIM(?))`,
-          args: [usuarioId, nome.trim()],
-        });
+        const result = await pool.query(
+          `SELECT id, mes FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
+          [usuarioId, nome.trim()]
+        );
 
         const idsParaDeletar = result.rows
           .filter((row) => {
@@ -473,16 +717,13 @@ ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, 
           .map((row) => row.id);
 
         for (const rowId of idsParaDeletar) {
-          await turso.execute({
-            sql: `DELETE FROM ${tabela} WHERE id = ? AND usuario_id = ?`,
-            args: [rowId, usuarioId],
-          });
+          await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
         }
       } else if (parcelaNum) {
-        const result = await turso.execute({
-          sql: `SELECT id, parcelas FROM ${tabela} WHERE usuario_id = ? AND LOWER(TRIM(nome)) = LOWER(TRIM(?))`,
-          args: [usuarioId, nome.trim()],
-        });
+        const result = await pool.query(
+          `SELECT id, parcelas FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
+          [usuarioId, nome.trim()]
+        );
 
         const idsParaDeletar = result.rows
           .filter((row) => {
@@ -492,22 +733,13 @@ ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, 
           .map((row) => row.id);
 
         for (const rowId of idsParaDeletar) {
-          await turso.execute({
-            sql: `DELETE FROM ${tabela} WHERE id = ? AND usuario_id = ?`,
-            args: [rowId, usuarioId],
-          });
+          await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
         }
       } else {
-        await turso.execute({
-          sql: `DELETE FROM ${tabela} WHERE id = ? AND usuario_id = ?`,
-          args: [id, usuarioId],
-        });
+        await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
       }
     } else {
-      await turso.execute({
-        sql: `DELETE FROM ${tabela} WHERE id = ? AND usuario_id = ?`,
-        args: [id, usuarioId],
-      });
+      await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
     }
     return { success: true };
   } catch (error) {
@@ -529,18 +761,19 @@ ipcMain.handle('exportar-csv', async (event, { dados, mes, ano }) => {
     if (canceled || !filePath) return { success: false };
 
     let csvContent = '\uFEFF';
-    csvContent += 'Tipo;Nome;Classificação;Etiqueta;Parcelas;Valor (R$);Mês;Ano\n';
+    csvContent += 'Tipo;Data/Hora;Nome;Classificação;Etiqueta;Parcelas;Valor (R$);Mês;Ano\n';
 
     for (const item of dados) {
       const isRec = item.tipo === 'receitas' || item.tipo === 'receita';
       const tipoLabel = isRec ? 'Receita' : 'Despesa';
+      const dtStr = item.data_transacao ? new Date(item.data_transacao).toLocaleString('pt-BR') : '';
       const nomeSanitizado = (item.nome || '').replace(/;/g, ',');
       const classifSanitizado = (item.classificacao || '').replace(/;/g, ',');
       const etiqSanitizado = (item.etiqueta || '').replace(/;/g, ',');
       const parcelasStr = item.eh_fixa === 1 ? 'Fixa' : (item.parcelas || '1/1');
       const valorStr = (Number(item.valor) || 0).toFixed(2).replace('.', ',');
 
-      csvContent += `${tipoLabel};${nomeSanitizado};${classifSanitizado};${etiqSanitizado};${parcelasStr};${valorStr};${item.mes};${item.ano}\n`;
+      csvContent += `${tipoLabel};${dtStr};${nomeSanitizado};${classifSanitizado};${etiqSanitizado};${parcelasStr};${valorStr};${item.mes};${item.ano}\n`;
     }
 
     fs.writeFileSync(filePath, csvContent, 'utf-8');
@@ -551,7 +784,7 @@ ipcMain.handle('exportar-csv', async (event, { dados, mes, ano }) => {
   }
 });
 
-// EXPORTAR RELATÓRIO EXECUTIVO EM PDF FORMATADO E VISUAL
+// EXPORTAR RELATÓRIO EXECUTIVO EM PDF
 ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList = [], categorias = [], mes, ano, totalReceitas = 0, totalDespesas = 0, economia = 0, usuarioNome = '' }) => {
   try {
     const defaultFilename = `Relatorio_Executivo_${mes}_${ano}.pdf`;
@@ -615,6 +848,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
         <table>
           <thead>
             <tr>
+              <th class="th-receita">Data/Hora</th>
               <th class="th-receita">Nome</th>
               <th class="th-receita">Categoria</th>
               <th class="th-receita">Etiqueta</th>
@@ -625,6 +859,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
           <tbody>
             ${receitasList.map((r) => `
               <tr>
+                <td>${r.data_transacao ? new Date(r.data_transacao).toLocaleString('pt-BR') : ''}</td>
                 <td><strong>${r.nome}</strong></td>
                 <td>${r.classificacao || 'Salário & Ganhos'}</td>
                 <td><span class="badge-tag">${r.etiqueta || 'Geral'}</span></td>
@@ -645,6 +880,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
         <table>
           <thead>
             <tr>
+              <th>Data/Hora</th>
               <th>Nome</th>
               <th>Categoria</th>
               <th>Etiqueta</th>
@@ -655,6 +891,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
           <tbody>
             ${despesasList.map((d) => `
               <tr>
+                <td>${d.data_transacao ? new Date(d.data_transacao).toLocaleString('pt-BR') : ''}</td>
                 <td><strong>${d.nome}</strong></td>
                 <td>${d.classificacao || 'Outros'}</td>
                 <td><span class="badge-tag">${d.etiqueta || 'Geral'}</span></td>
@@ -796,15 +1033,22 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
 });
 
 const createWindow = () => {
+  const iconPng = path.resolve(process.cwd(), 'images/app_icon.png');
+  const iconJpg = path.resolve(process.cwd(), 'images/app_icon.jpg');
+  const finalIcon = fs.existsSync(iconPng) ? iconPng : iconJpg;
+
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 850,
+    title: 'Gestor de Orçamento',
+    icon: finalIcon,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
 
+  mainWindow.setTitle('Gestor de Orçamento');
   mainWindow.setMenu(null);
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

@@ -1,16 +1,20 @@
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Exposição segura da ponte IPC para a interface React
 contextBridge.exposeInMainWorld('apiTurso', {
   registrarUsuario: (dados) => ipcRenderer.invoke('registrar-usuario', dados),
-  loginUsuario: (credenciais) => ipcRenderer.invoke('login-usuario', credenciais),
-  carregarCategorias: (usuarioId) => ipcRenderer.invoke('carregar-categorias', { usuarioId }),
+  loginUsuario: (dados) => ipcRenderer.invoke('login-usuario', dados),
+  carregarContas: (dados) => ipcRenderer.invoke('carregar-contas', dados),
+  criarConta: (dados) => ipcRenderer.invoke('criar-conta', dados),
+  deletarConta: (dados) => ipcRenderer.invoke('deletar-conta', dados),
+  carregarCategorias: (dados) => ipcRenderer.invoke('carregar-categorias', dados),
   adicionarCategoria: (dados) => ipcRenderer.invoke('adicionar-categoria', dados),
-  deletarCategoria: (id, usuarioId) => ipcRenderer.invoke('deletar-categoria', { id, usuarioId }),
-  carregarTransacoes: (usuarioId, mes, ano) => ipcRenderer.invoke('carregar-transacoes', { usuarioId, mes, ano }),
-  adicionarTransacao: (novaTransacao) => ipcRenderer.invoke('adicionar-transacao', novaTransacao),
-  editarTransacao: (dadosEdicao) => ipcRenderer.invoke('editar-transacao', dadosEdicao),
-  deletarTransacao: (id, usuarioId, opcoes = {}) => ipcRenderer.invoke('deletar-transacao', { id, usuarioId, ...opcoes }),
-  exportarCSV: (dadosExportacao) => ipcRenderer.invoke('exportar-csv', dadosExportacao),
-  exportarPDF: (dadosExportacao) => ipcRenderer.invoke('exportar-pdf', dadosExportacao),
+  deletarCategoria: (dados) => ipcRenderer.invoke('deletar-categoria', dados),
+  carregarEtiquetas: (dados) => ipcRenderer.invoke('carregar-etiquetas', dados),
+  adicionarEtiqueta: (dados) => ipcRenderer.invoke('adicionar-etiqueta', dados),
+  carregarTransacoes: (dados) => ipcRenderer.invoke('carregar-transacoes', dados),
+  adicionarTransacao: (dados) => ipcRenderer.invoke('adicionar-transacao', dados),
+  editarTransacao: (dados) => ipcRenderer.invoke('editar-transacao', dados),
+  deletarTransacao: (dados) => ipcRenderer.invoke('deletar-transacao', dados),
+  exportarCSV: (dados) => ipcRenderer.invoke('exportar-csv', dados),
+  exportarPDF: (dados) => ipcRenderer.invoke('exportar-pdf', dados),
 });

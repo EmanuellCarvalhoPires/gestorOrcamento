@@ -1,52 +1,43 @@
 import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
-import logoApp from '../../images/Logo App.png';
-import logoGoogle from '../../images/Logo google.png';
+import appIcon from '../../images/app_icon.jpg';
 
 export default function AuthView() {
   const { login, registrar } = useBudget();
-  const [modo, setModo] = useState('login'); // 'login' ou 'registrar'
+  const [isRegistro, setIsRegistro] = useState(false);
 
-  // Campos de Formulário
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [confirmarSenha, setConfirmarSenha] = useState('');
-
-  // Mensagens de Feedback
-  const [erro, setErro] = useState('');
+  const [perfilUso, setPerfilUso] = useState('individual'); // 'individual' ou 'comercial'
+  
+  const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErro('');
-
-    if (modo === 'registrar') {
-      if (!nome.trim()) {
-        setErro('Por favor, informe seu nome de usuário.');
-        return;
-      }
-      if (senha !== confirmarSenha) {
-        setErro('As senhas não coincidem. Digite novamente.');
-        return;
-      }
-      if (senha.length < 6) {
-        setErro('A senha deve conter pelo menos 6 caracteres.');
-        return;
-      }
-    }
-
+    setErrorMsg('');
     setLoading(true);
 
-    if (modo === 'login') {
-      const res = await login({ email, senha });
-      if (!res.success) {
-        setErro(res.error || 'Erro ao realizar login.');
+    if (isRegistro) {
+      if (!nome.trim() || !email.trim() || !senha.trim()) {
+        setErrorMsg('Preencha todos os campos obrigatórios.');
+        setLoading(false);
+        return;
+      }
+      const res = await registrar({ nome, email, senha, perfilUso });
+      if (!res?.success) {
+        setErrorMsg(res?.error || 'Erro ao realizar cadastro.');
       }
     } else {
-      const res = await registrar({ nome, email, senha });
-      if (!res.success) {
-        setErro(res.error || 'Erro ao criar conta.');
+      if (!email.trim() || !senha.trim()) {
+        setErrorMsg('Preencha o e-mail e a senha.');
+        setLoading(false);
+        return;
+      }
+      const res = await login({ email, senha });
+      if (!res?.success) {
+        setErrorMsg(res?.error || 'Falha ao realizar login.');
       }
     }
 
@@ -56,82 +47,92 @@ export default function AuthView() {
   return (
     <div
       style={{
-        minHeight: '100vh',
-        backgroundColor: '#3a3a3a',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#3e3e3e',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
-        boxSizing: 'border-box',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        color: '#ffffff',
+        fontFamily: 'sans-serif',
       }}
     >
       <div
         style={{
           backgroundColor: '#545454',
-          borderRadius: '20px',
+          borderRadius: '24px',
           padding: '36px',
           width: '100%',
-          maxWidth: '420px',
+          maxWidth: '440px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '20px',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
         }}
       >
-        {/* Logotipo do App */}
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <img
-            src={logoApp}
-            alt="Logo Gestor de Orçamento"
-            style={{ width: '90px', height: 'auto', marginBottom: '12px' }}
-          />
-          <h1 style={{ margin: 0, color: '#ffe192', fontSize: '24px', fontWeight: 'bold' }}>
-            Gestor de Orçamento
-          </h1>
-          <p style={{ margin: '6px 0 0 0', color: '#dddddd', fontSize: '14px' }}>
-            {modo === 'login' ? 'Entre na sua conta para continuar' : 'Crie sua conta para gerenciar suas finanças'}
-          </p>
+        {/* Logo do Aplicativo */}
+        <div
+          style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            overflow: 'hidden',
+            marginBottom: '14px',
+            border: '2px solid #ffe192',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}
+        >
+          <img src={appIcon} alt="Logo Gestor de Orçamento" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
 
+        {/* Título e Subtítulo */}
+        <h2 style={{ margin: '0 0 8px 0', color: '#ffe192', fontSize: '26px', textAlign: 'center' }}>
+          Gestor de Orçamento
+        </h2>
+        <p style={{ margin: '0 0 24px 0', color: '#dddddd', fontSize: '14px', textAlign: 'center' }}>
+          {isRegistro ? 'Crie sua conta e escolha seu modo de uso' : 'Faça login para acessar suas finanças'}
+        </p>
+
         {/* Mensagem de Erro */}
-        {erro && (
+        {errorMsg && (
           <div
             style={{
-              width: '100%',
               backgroundColor: '#d90429',
               color: '#ffffff',
-              padding: '10px 14px',
-              borderRadius: '8px',
+              padding: '10px 16px',
+              borderRadius: '12px',
               fontSize: '13px',
+              marginBottom: '16px',
+              width: '100%',
               textAlign: 'center',
+              fontWeight: '500',
             }}
           >
-            {erro}
+            {errorMsg}
           </div>
         )}
 
-        {/* Formulário Principal */}
-        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {modo === 'registrar' && (
+        {/* Formulário */}
+        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {isRegistro && (
             <div>
-              <label style={{ fontSize: '13px', color: '#ffe192', display: 'block', marginBottom: '4px' }}>
-                Nome de Usuário*
+              <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
+                Seu Nome Completo
               </label>
               <input
                 type="text"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                required
-                placeholder="Seu nome completo ou apelido"
+                placeholder="Ex: Emanuel Carvalho"
                 style={{
                   width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
                   border: '1px solid #737373',
-                  backgroundColor: '#666666',
+                  backgroundColor: '#3e3e3e',
                   color: '#ffffff',
+                  fontSize: '14px',
+                  outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
@@ -139,162 +140,151 @@ export default function AuthView() {
           )}
 
           <div>
-            <label style={{ fontSize: '13px', color: '#ffe192', display: 'block', marginBottom: '4px' }}>
-              E-mail*
+            <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
+              Endereço de E-mail
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               placeholder="seuemail@exemplo.com"
               style={{
                 width: '100%',
-                padding: '10px 14px',
-                borderRadius: '8px',
+                padding: '12px 14px',
+                borderRadius: '12px',
                 border: '1px solid #737373',
-                backgroundColor: '#666666',
+                backgroundColor: '#3e3e3e',
                 color: '#ffffff',
+                fontSize: '14px',
+                outline: 'none',
                 boxSizing: 'border-box',
               }}
             />
           </div>
 
           <div>
-            <label style={{ fontSize: '13px', color: '#ffe192', display: 'block', marginBottom: '4px' }}>
-              Senha*
+            <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
+              Sua Senha
             </label>
             <input
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              required
-              placeholder="Sua senha secreta"
+              placeholder="••••••••"
               style={{
                 width: '100%',
-                padding: '10px 14px',
-                borderRadius: '8px',
+                padding: '12px 14px',
+                borderRadius: '12px',
                 border: '1px solid #737373',
-                backgroundColor: '#666666',
+                backgroundColor: '#3e3e3e',
                 color: '#ffffff',
+                fontSize: '14px',
+                outline: 'none',
                 boxSizing: 'border-box',
               }}
             />
           </div>
 
-          {modo === 'registrar' && (
+          {/* Seletor de Perfil no Cadastro */}
+          {isRegistro && (
             <div>
-              <label style={{ fontSize: '13px', color: '#ffe192', display: 'block', marginBottom: '4px' }}>
-                Confirmar Senha*
+              <label style={{ display: 'block', fontSize: '12px', color: '#ffe192', marginBottom: '8px', fontWeight: 'bold' }}>
+                Objetivo de Uso do App:
               </label>
-              <input
-                type="password"
-                value={confirmarSenha}
-                onChange={(e) => setConfirmarSenha(e.target.value)}
-                required
-                placeholder="Repita a senha"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: '1px solid #737373',
-                  backgroundColor: '#666666',
-                  color: '#ffffff',
-                  boxSizing: 'border-box',
-                }}
-              />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPerfilUso('individual')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 10px',
+                    borderRadius: '14px',
+                    border: perfilUso === 'individual' ? '2px solid #ffe192' : '1px solid #737373',
+                    backgroundColor: perfilUso === 'individual' ? '#666666' : '#3e3e3e',
+                    color: perfilUso === 'individual' ? '#ffe192' : '#aaaaaa',
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>👤</span>
+                  <span>Uso Individual</span>
+                  <span style={{ fontSize: '10px', fontWeight: 'normal', color: '#dddddd' }}>Finanças Pessoais</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPerfilUso('comercial')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 10px',
+                    borderRadius: '14px',
+                    border: perfilUso === 'comercial' ? '2px solid #ffe192' : '1px solid #737373',
+                    backgroundColor: perfilUso === 'comercial' ? '#666666' : '#3e3e3e',
+                    color: perfilUso === 'comercial' ? '#ffe192' : '#aaaaaa',
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>🏢</span>
+                  <span>Uso Comercial</span>
+                  <span style={{ fontSize: '10px', fontWeight: 'normal', color: '#dddddd' }}>Empresas & Comércio</span>
+                </button>
+              </div>
             </div>
           )}
 
-          {modo === 'login' && (
-            <div style={{ textAlign: 'right', marginTop: '-6px' }}>
-              <a
-                href="#esqueceu"
-                onClick={(e) => {
-                  e.preventDefault();
-                  alert('Em breve você receberá as instruções de redefinição por e-mail.');
-                }}
-                style={{ color: '#ffe192', fontSize: '12px', textDecoration: 'none' }}
-              >
-                Esqueceu sua senha?
-              </a>
-            </div>
-          )}
-
+          {/* Botão Submeter */}
           <button
             type="submit"
             disabled={loading}
             style={{
-              padding: '12px',
+              marginTop: '10px',
+              padding: '14px',
               borderRadius: '24px',
               border: 'none',
               backgroundColor: '#ffe192',
               color: '#333333',
               fontWeight: 'bold',
               fontSize: '16px',
-              cursor: loading ? 'wait' : 'pointer',
-              marginTop: '10px',
-              transition: 'opacity 0.2s',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              transition: 'transform 0.1s',
             }}
           >
-            {loading ? 'Aguarde...' : modo === 'login' ? 'Entrar' : 'Cadastrar Conta'}
+            {loading ? 'Processando...' : isRegistro ? 'Criar Conta' : 'Entrar no Sistema'}
           </button>
         </form>
 
-        {/* Divisor Visual */}
-        <div style={{ display: 'flex', alignItems: 'center', width: '100%', margin: '4px 0' }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
-          <span style={{ padding: '0 10px', color: '#aaaaaa', fontSize: '12px' }}>ou</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
-        </div>
-
-        {/* Botão de Entrar com Google (Preparado) */}
-        <button
-          type="button"
-          onClick={() => alert('Autenticação com Google estará disponível em breve!')}
-          style={{
-            width: '100%',
-            padding: '10px 14px',
-            borderRadius: '24px',
-            border: '1px solid #737373',
-            backgroundColor: '#666666',
-            color: '#ffffff',
-            fontWeight: '600',
-            fontSize: '14px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '10px',
-          }}
-        >
-          <img src={logoGoogle} alt="Google logo" style={{ width: '20px', height: '20px' }} />
-          Continuar com o Google
-        </button>
-
-        {/* Alternador de Modo (Login vs Registrar) */}
-        <div style={{ fontSize: '14px', color: '#dddddd', textAlign: 'center', marginTop: '6px' }}>
-          {modo === 'login' ? (
-            <>
-              Não tem uma conta?{' '}
-              <button
-                onClick={() => { setModo('registrar'); setErro(''); }}
-                style={{ background: 'none', border: 'none', color: '#ffe192', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Cadastre-se
-              </button>
-            </>
-          ) : (
-            <>
-              Já possui uma conta?{' '}
-              <button
-                onClick={() => { setModo('login'); setErro(''); }}
-                style={{ background: 'none', border: 'none', color: '#ffe192', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Faça Login
-              </button>
-            </>
-          )}
+        {/* Alternar entre Login e Cadastro */}
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            onClick={() => {
+              setIsRegistro(!isRegistro);
+              setErrorMsg('');
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#aaaaaa',
+              fontSize: '13px',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+            }}
+          >
+            {isRegistro ? 'Já possui uma conta? Faça Login' : 'Ainda não tem conta? Cadastre-se'}
+          </button>
         </div>
       </div>
     </div>

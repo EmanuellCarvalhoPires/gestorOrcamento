@@ -2,63 +2,63 @@ import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
-  const { categorias } = useBudget();
+  const { categorias, isComercial, setIsCategoryModalOpen } = useBudget();
+
+  const getFormattedDateTime = (isoOrDate) => {
+    if (!isoOrDate) return '';
+    const d = new Date(isoOrDate);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => (n < 10 ? `0${n}` : n);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const [nome, setNome] = useState('');
-  const [valorRaw, setValorRaw] = useState(0);
-  const [valorExibido, setValorExibido] = useState('');
-  const [etiqueta, setEtiqueta] = useState('');
-  const [classificacao, setClassificacao] = useState('Outros');
+  const [valorFormatado, setValorFormatado] = useState('R$ 0,00');
+  const [valorNumerico, setValorNumerico] = useState(0);
+  const [classificacao, setClassificacao] = useState('');
+  const [etiqueta, setEtiqueta] = useState('Geral');
+  const [dataTransacao, setDataTransacao] = useState('');
   const [descricao, setDescricao] = useState('');
 
   useEffect(() => {
     if (item) {
       setNome(item.nome || '');
-      const numValor = Number(item.valor) || 0;
-      setValorRaw(numValor);
-      setValorExibido(
-        numValor.toLocaleString('pt-BR', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      );
-      setEtiqueta(item.etiqueta || '');
-      setClassificacao(item.classificacao || (categorias[0]?.nome || 'Outros'));
+      const val = Number(item.valor) || 0;
+      setValorNumerico(val);
+      setValorFormatado(val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+      setClassificacao(item.classificacao || '');
+      setEtiqueta(item.etiqueta || 'Geral');
+      setDataTransacao(getFormattedDateTime(item.data_transacao));
       setDescricao(item.descricao || '');
     }
-  }, [item, categorias]);
+  }, [item]);
 
   if (!isOpen || !item) return null;
 
   const handleValorChange = (e) => {
-    const apenasNumeros = e.target.value.replace(/\D/g, '');
+    const apenasDigitos = e.target.value.replace(/\D/g, '');
+    const numero = Number(apenasDigitos) / 100;
+    setValorNumerico(numero);
 
-    if (!apenasNumeros) {
-      setValorRaw(0);
-      setValorExibido('');
-      return;
-    }
-
-    const valorNumerico = parseFloat(apenasNumeros) / 100;
-    setValorRaw(valorNumerico);
-    setValorExibido(
-      valorNumerico.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-    );
+    const formatado = numero.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+    setValorFormatado(formatado);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!nome || valorRaw <= 0) return;
+    if (!nome.trim() || valorNumerico <= 0) return;
 
     onSave({
       id: item.id,
+      oldNome: item.nome,
       nome,
-      valor: valorRaw,
-      classificacao,
+      valor: valorNumerico,
+      classificacao: classificacao || (categorias[0]?.nome || 'Outros'),
       etiqueta,
+      dataTransacao,
       descricao,
     });
   };
@@ -75,99 +75,156 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 2000,
+        zIndex: 1500,
       }}
     >
       <div
         style={{
           backgroundColor: '#545454',
-          borderRadius: '16px',
-          padding: '24px',
-          width: '390px',
+          borderRadius: '24px',
+          padding: '32px',
+          width: '90%',
+          maxWidth: '520px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
-          color: '#ffe192',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          gap: '18px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: '20px' }}>
-            Editar Lançamento
-          </h2>
+          <h3 style={{ margin: 0, color: '#ffffff', fontSize: '20px', fontWeight: 'bold' }}>
+            ✏️ Editar Lançamento
+          </h3>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#ffffff', fontSize: '22px', cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: '#aaaaaa', fontSize: '18px', cursor: 'pointer' }}
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Nome */}
           <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Nome*</label>
+            <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+              {isComercial ? 'Nome do Cliente / Fornecedor / Lançamento' : 'Nome da Despesa / Receita'}
+            </label>
             <input
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '14px',
+                border: '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffffff',
+                fontSize: '15px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
               required
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #737373', backgroundColor: '#666666', color: '#ffffff', boxSizing: 'border-box' }}
             />
           </div>
 
-          <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Valor (R$)*</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={valorExibido}
-              onChange={handleValorChange}
-              required
-              placeholder="0,00"
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #737373', backgroundColor: '#666666', color: '#ffffff', boxSizing: 'border-box' }}
-            />
+          {/* Valor + Data e Hora */}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+                Valor (R$)
+              </label>
+              <input
+                type="text"
+                value={valorFormatado}
+                onChange={handleValorChange}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '14px',
+                  border: '1px solid #737373',
+                  backgroundColor: '#3e3e3e',
+                  color: '#ffe192',
+                  fontSize: '17px',
+                  fontWeight: 'bold',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                required
+              />
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+                📅 Data e Hora
+              </label>
+              <input
+                type="datetime-local"
+                value={dataTransacao}
+                onChange={(e) => setDataTransacao(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 12px',
+                  borderRadius: '14px',
+                  border: '1px solid #737373',
+                  backgroundColor: '#3e3e3e',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                required
+              />
+            </div>
           </div>
 
+          {/* Classificação */}
           <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Classificação / Categoria</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ color: '#dddddd', fontSize: '13px' }}>Classificação / Categoria</label>
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ffe192',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                + Gerenciar Categorias
+              </button>
+            </div>
             <select
               value={classificacao}
               onChange={(e) => setClassificacao(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #737373', backgroundColor: '#666666', color: '#ffffff', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '14px',
+                border: '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffffff',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             >
-              {categorias.length === 0 ? (
-                <option value="Outros">Outros</option>
-              ) : (
-                categorias.map((cat) => (
-                  <option key={cat.id || cat.nome} value={cat.nome}>
-                    {cat.nome}
-                  </option>
-                ))
-              )}
+              <option value="">Selecione uma Categoria...</option>
+              {categorias.map((cat) => (
+                <option key={cat.id || cat.nome} value={cat.nome}>
+                  {cat.nome}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Etiqueta</label>
-            <input
-              type="text"
-              value={etiqueta}
-              onChange={(e) => setEtiqueta(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #737373', backgroundColor: '#666666', color: '#ffffff', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Descrição</label>
-            <textarea
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              rows="2"
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #737373', backgroundColor: '#666666', color: '#ffffff', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          {/* Botões do Rodapé */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
             <button
               type="button"
               onClick={onClose}
@@ -179,13 +236,12 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 backgroundColor: '#737373',
                 color: '#ffffff',
                 fontWeight: 'bold',
-                fontSize: '15px',
+                fontSize: '14px',
                 cursor: 'pointer',
               }}
             >
               Cancelar
             </button>
-
             <button
               type="submit"
               style={{
@@ -196,8 +252,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 backgroundColor: '#ffe192',
                 color: '#333333',
                 fontWeight: 'bold',
-                fontSize: '15px',
+                fontSize: '14px',
                 cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}
             >
               Salvar Alterações

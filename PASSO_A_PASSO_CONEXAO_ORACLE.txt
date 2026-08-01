@@ -23,7 +23,7 @@ PASSO 3: CORRIGIR PERMISSOES DA CHAVE NO WINDOWS (SE NECESSARIO)
 --------------------------------------------------------------------
 Copie e cole o comando abaixo no PowerShell:
 
-icacls "ssh-key-2026-07-30.key" /inheritance:r /grant:r "$($env:USERNAME):R"
+icacls "ssh-key-2026-07-30.key" /reset; icacls "ssh-key-2026-07-30.key" /inheritance:r; icacls "ssh-key-2026-07-30.key" /grant:r "$($env:USERNAME):R"
 
 --------------------------------------------------------------------
 PASSO 4: CONECTAR VIA SSH NA VM ORACLE

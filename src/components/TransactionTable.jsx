@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import iconLixeira from '../../images/lixeira-de-reciclagem.png';
 import DeleteConfirmModal from './DeleteConfirmModal';
-import EditExpenseModal from './EditExpenseModal';
+import TransactionDetailsModal from './TransactionDetailsModal';
 
 export default function TransactionTable() {
   const {
@@ -12,24 +12,30 @@ export default function TransactionTable() {
     setIsModalOpen,
     totalReceitas,
     totalDespesas,
+    isComercial,
     editarTransacao,
     deletarTransacao,
+    setMesSelecionado,
+    setAnoSelecionado,
   } = useBudget();
 
   const [buscaTexto, setBuscaTexto] = useState('');
   const [itemParaDeletar, setItemParaDeletar] = useState(null);
-  const [itemParaEditar, setItemParaEditar] = useState(null);
+  const [itemParaDetalhes, setItemParaDetalhes] = useState(null);
 
   const totalExibido = abaAtiva === 'receitas' ? totalReceitas : totalDespesas;
 
-  // Filtro de Busca em Tempo Real por Nome, Etiqueta ou Classificação
+  // Filtro de Busca em Tempo Real por Nome, Etiqueta, Classificação ou Data
   const transacoesFiltradasPelaBusca = transacoesTabela.filter((t) => {
     if (!buscaTexto.trim()) return true;
     const termo = buscaTexto.toLowerCase().trim();
+    const dataStr = t.data_transacao ? new Date(t.data_transacao).toLocaleString('pt-BR') : '';
+
     return (
       (t.nome && t.nome.toLowerCase().includes(termo)) ||
       (t.etiqueta && t.etiqueta.toLowerCase().includes(termo)) ||
-      (t.classificacao && t.classificacao.toLowerCase().includes(termo))
+      (t.classificacao && t.classificacao.toLowerCase().includes(termo)) ||
+      dataStr.toLowerCase().includes(termo)
     );
   });
 
@@ -48,12 +54,31 @@ export default function TransactionTable() {
   };
 
   const handleSaveEdit = async (dadosEdicao) => {
-    await editarTransacao({
+    const res = await editarTransacao({
       ...dadosEdicao,
       tipo: abaAtiva,
     });
-    setItemParaEditar(null);
+    if (res?.mesCalculado) setMesSelecionado(res.mesCalculado);
+    if (res?.anoCalculado) setAnoSelecionado(res.anoCalculado);
+    setItemParaDetalhes(null);
   };
+
+  const formatDataHora = (isoStr) => {
+    if (!isoStr) return '--/--';
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '--/--';
+    const pad = (n) => (n < 10 ? `0${n}` : n);
+    const diaMes = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+    const hora = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${diaMes} ${hora}`;
+  };
+
+  // Nomenclaturas adaptativas por perfil
+  const labelAbaReceitas = isComercial ? 'Vendas & Faturamento' : 'Receita do Mês';
+  const labelAbaDespesas = isComercial ? 'Custos & Despesas' : 'Despesas do Mês';
+  const labelColunaNome = isComercial
+    ? (abaAtiva === 'receitas' ? 'Cliente / Produto' : 'Fornecedor / Custo')
+    : 'Nome';
 
   return (
     <div
@@ -86,7 +111,7 @@ export default function TransactionTable() {
               transition: 'all 0.2s',
             }}
           >
-            Receita do Mês
+            {labelAbaReceitas}
           </button>
 
           <button
@@ -103,7 +128,7 @@ export default function TransactionTable() {
               transition: 'all 0.2s',
             }}
           >
-            Despesas do Mês
+            {labelAbaDespesas}
           </button>
         </div>
 
@@ -115,7 +140,7 @@ export default function TransactionTable() {
               type="text"
               value={buscaTexto}
               onChange={(e) => setBuscaTexto(e.target.value)}
-              placeholder="🔍 Buscar lançamento..."
+              placeholder="🔍 Buscar por nome, data..."
               style={{
                 padding: '8px 30px 8px 14px',
                 borderRadius: '20px',
@@ -187,23 +212,24 @@ export default function TransactionTable() {
 
       {/* Tabela de Lançamentos */}
       <div style={{ overflowY: 'auto', maxHeight: '420px', borderRadius: '8px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ffffff', textAlign: 'left', fontSize: '14px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ffffff', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#666666', color: '#ffe192' }}>
-              <th style={{ padding: '12px 16px', borderTopLeftRadius: '6px' }}>Nome</th>
-              <th style={{ padding: '12px 16px' }}>Classificação</th>
-              <th style={{ padding: '12px 16px' }}>Etiqueta</th>
-              <th style={{ padding: '12px 16px' }}>
+              <th style={{ padding: '12px 14px', borderTopLeftRadius: '6px' }}>Data / Hora</th>
+              <th style={{ padding: '12px 14px' }}>{labelColunaNome}</th>
+              <th style={{ padding: '12px 14px' }}>Classificação</th>
+              <th style={{ padding: '12px 14px' }}>Etiqueta</th>
+              <th style={{ padding: '12px 14px' }}>
                 {abaAtiva === 'receitas' ? 'Recorrência' : 'Num. de Parcelas'}
               </th>
-              <th style={{ padding: '12px 16px' }}>Valor</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
+              <th style={{ padding: '12px 14px' }}>Valor</th>
+              <th style={{ padding: '12px 14px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {transacoesFiltradasPelaBusca.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '32px', textAlign: 'center', color: '#cccccc' }}>
+                <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#cccccc' }}>
                   {buscaTexto
                     ? `Nenhum lançamento encontrado para "${buscaTexto}".`
                     : 'Nenhuma transação cadastrada para este mês/ano.'}
@@ -232,44 +258,58 @@ export default function TransactionTable() {
               transacoesFiltradasPelaBusca.map((item, index) => (
                 <tr
                   key={item.id}
+                  onClick={() => setItemParaDetalhes({ ...item, tipo: abaAtiva })}
                   style={{
                     backgroundColor: index % 2 === 0 ? '#5d5d5d' : '#525252',
                     borderBottom: '1px solid #666666',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s',
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#6e6e6e')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#5d5d5d' : '#525252')}
                 >
-                  <td style={{ padding: '12px 16px', fontWeight: '500' }}>{item.nome}</td>
-                  <td style={{ padding: '12px 16px', color: '#dddddd' }}>{item.classificacao}</td>
-                  <td style={{ padding: '12px 16px', color: '#dddddd' }}>{item.etiqueta}</td>
-                  <td style={{ padding: '12px 16px', color: '#dddddd' }}>
+                  {/* Coluna Data / Hora */}
+                  <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: '500', fontSize: '12px' }}>
+                    {formatDataHora(item.data_transacao)}
+                  </td>
+                  <td style={{ padding: '12px 14px', fontWeight: '500' }}>{item.nome}</td>
+                  <td style={{ padding: '12px 14px', color: '#dddddd' }}>{item.classificacao}</td>
+                  <td style={{ padding: '12px 14px', color: '#dddddd' }}>{item.etiqueta}</td>
+                  <td style={{ padding: '12px 14px', color: '#dddddd' }}>
                     {item.eh_fixa === 1 ? 'Fixa' : item.parcelas}
                   </td>
-                  <td style={{ padding: '12px 16px', color: '#ffe192', fontWeight: 'bold' }}>
+                  <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: 'bold' }}>
                     R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                  <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                      {/* Botão de Editar ✏️ */}
+                      {/* Botão de Ver Detalhes / Editar */}
                       <button
-                        onClick={() => setItemParaEditar(item)}
-                        title="Editar lançamento"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setItemParaDetalhes({ ...item, tipo: abaAtiva });
+                        }}
+                        title="Ver detalhes e editar"
                         style={{
-                          background: 'none',
+                          backgroundColor: '#737373',
                           border: 'none',
+                          borderRadius: '12px',
+                          color: '#ffffff',
                           cursor: 'pointer',
-                          padding: '4px',
-                          fontSize: '16px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'transform 0.1s',
+                          padding: '4px 12px',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
                         }}
                       >
-                        ✏️
+                        Detalhes
                       </button>
 
                       {/* Botão de Excluir 🗑️ */}
                       <button
-                        onClick={() => setItemParaDeletar(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setItemParaDeletar(item);
+                        }}
                         title="Excluir lançamento"
                         style={{
                           background: 'none',
@@ -279,13 +319,12 @@ export default function TransactionTable() {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          transition: 'transform 0.1s',
                         }}
                       >
                         <img
                           src={iconLixeira}
                           alt="Excluir"
-                          style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                          style={{ width: '18px', height: '18px', objectFit: 'contain' }}
                         />
                       </button>
                     </div>
@@ -297,12 +336,13 @@ export default function TransactionTable() {
         </table>
       </div>
 
-      {/* Modal Customizado de Edição */}
-      <EditExpenseModal
-        isOpen={!!itemParaEditar}
-        item={itemParaEditar}
-        onClose={() => setItemParaEditar(null)}
+      {/* Tela / Modal de Detalhes do Lançamento com Edição Integrada */}
+      <TransactionDetailsModal
+        isOpen={!!itemParaDetalhes}
+        item={itemParaDetalhes}
+        onClose={() => setItemParaDetalhes(null)}
         onSave={handleSaveEdit}
+        onDelete={(itemToDelete) => setItemParaDeletar(itemToDelete)}
       />
 
       {/* Modal Customizado de Confirmação de Exclusão */}

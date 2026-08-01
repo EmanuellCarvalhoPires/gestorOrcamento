@@ -1,256 +1,317 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export const BudgetContext = createContext();
+const BudgetContext = createContext();
 
-const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const ANOS_LISTA = ['2024', '2025', '2026', '2027'];
+const MESES_LISTA = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-export function BudgetProvider({ children }) {
-  const dataAtual = new Date();
-  const anoAtualStr = dataAtual.getFullYear().toString();
-  const mesAtualStr = mesesNomes[dataAtual.getMonth()];
-
-  // Estado do Usuário Autenticado
+export const BudgetProvider = ({ children }) => {
+  // Sessão do Usuário
   const [usuarioLogado, setUsuarioLogado] = useState(() => {
     try {
-      const usuarioSalvo = localStorage.getItem('usuarioLogado');
-      return usuarioSalvo ? JSON.parse(usuarioSalvo) : null;
+      const salvo = localStorage.getItem('@gestor_usuario');
+      return salvo ? JSON.parse(salvo) : null;
     } catch {
       return null;
     }
   });
 
-  // Lista de Anos
-  const [anos, setAnos] = useState(() => {
-    const baseAnos = ['2024', '2025', '2026', '2027'];
-    if (!baseAnos.includes(anoAtualStr)) {
-      return [...baseAnos, anoAtualStr].sort();
+  // Múltiplas Contas por Usuário
+  const [contas, setContas] = useState([]);
+  const [contaAtiva, setContaAtiva] = useState(() => {
+    try {
+      const salva = localStorage.getItem('@gestor_conta_ativa');
+      return salva ? JSON.parse(salva) : null;
+    } catch {
+      return null;
     }
-    return baseAnos;
   });
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
-  // Inicializa Mês e Ano reais de hoje
-  const [anoSelecionado, setAnoSelecionado] = useState(anoAtualStr);
-  const [mesSelecionado, setMesSelecionado] = useState(mesAtualStr);
-  
-  // Controle da Aba Ativa: 'receitas' ou 'despesas'
-  const [abaAtiva, setAbaAtiva] = useState('despesas');
+  // Perfil Ativo (Individual vs Comercial)
+  const isComercial = usuarioLogado?.perfilUso === 'comercial' || contaAtiva?.tipo === 'comercial';
+  const isIndividual = !isComercial;
 
-  // Controle de Modais
+  // Filtros de Data e Navegação
+  const [anoSelecionado, setAnoSelecionado] = useState('2026');
+  const [mesSelecionado, setMesSelecionado] = useState('Jan');
+  const [abaAtiva, setAbaAtiva] = useState('despesas'); // 'receitas' ou 'despesas'
+
+  // Transações, Categorias e Etiquetas Reutilizáveis
+  const [receitas, setReceitas] = useState([]);
+  const [despesas, setDespesas] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [etiquetaList, setEtiquetaList] = useState(['Geral']);
+
+  // Modais Globais
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  // Estados principais
-  const [categorias, setCategorias] = useState([]);
-  const [receitas, setReceitas] = useState([]);
-  const [despesas, setDespesas] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // Carrega Categorias
-  const carregarCategoriasDoBanco = async () => {
-    if (!usuarioLogado) return;
-    if (window.apiTurso) {
-      try {
-        const list = await window.apiTurso.carregarCategorias(usuarioLogado.id);
-        setCategorias(list || []);
-      } catch (err) {
-        console.error('Erro ao carregar categorias:', err);
+  // Login de Usuário (Chamado por AuthView)
+  const login = async ({ email, senha }) => {
+    if (!window.apiTurso) return { success: false, error: 'API indisponível.' };
+    try {
+      const res = await window.apiTurso.loginUsuario({ email, senha });
+      if (res?.success && res.user) {
+        setUsuarioLogado(res.user);
+        localStorage.setItem('@gestor_usuario', JSON.stringify(res.user));
+        return { success: true };
       }
+      return { success: false, error: res?.error || 'E-mail ou senha incorretos.' };
+    } catch (err) {
+      console.error('Erro no login:', err);
+      return { success: false, error: err.message };
     }
   };
 
-  // Carrega transações de receitas e despesas no Turso
-  const carregarTransacoesDoBanco = async () => {
-    if (!usuarioLogado) {
+  // Registro de Usuário (Chamado por AuthView)
+  const registrar = async ({ nome, email, senha, perfilUso }) => {
+    if (!window.apiTurso) return { success: false, error: 'API indisponível.' };
+    try {
+      const res = await window.apiTurso.registrarUsuario({ nome, email, senha, perfilUso });
+      if (res?.success && res.user) {
+        setUsuarioLogado(res.user);
+        localStorage.setItem('@gestor_usuario', JSON.stringify(res.user));
+        if (res.contaInicial) {
+          setContaAtiva(res.contaInicial);
+          localStorage.setItem('@gestor_conta_ativa', JSON.stringify(res.contaInicial));
+        }
+        return { success: true };
+      }
+      return { success: false, error: res?.error || 'Erro ao cadastrar usuário.' };
+    } catch (err) {
+      console.error('Erro no registro:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const logout = () => {
+    setUsuarioLogado(null);
+    setContas([]);
+    setContaAtiva(null);
+    localStorage.removeItem('@gestor_usuario');
+    localStorage.removeItem('@gestor_conta_ativa');
+  };
+
+  // Carrega as Contas do Usuário
+  const carregarContas = async (usrId) => {
+    if (!usrId || !window.apiTurso) return;
+    try {
+      const resContas = await window.apiTurso.carregarContas({ usuarioId: usrId });
+      const listaContas = Array.isArray(resContas) ? resContas : [];
+      setContas(listaContas);
+
+      if (listaContas.length > 0) {
+        if (!contaAtiva || !listaContas.find((c) => c.id === contaAtiva?.id)) {
+          setContaAtiva(listaContas[0]);
+          localStorage.setItem('@gestor_conta_ativa', JSON.stringify(listaContas[0]));
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar contas:', err);
+      setContas([]);
+    }
+  };
+
+  const selecionarConta = (conta) => {
+    setContaAtiva(conta);
+    localStorage.setItem('@gestor_conta_ativa', JSON.stringify(conta));
+  };
+
+  const criarNovaConta = async ({ nome, tipo, descricao, cor }) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      const res = await window.apiTurso.criarConta({
+        usuarioId: usuarioLogado.id,
+        nome,
+        tipo,
+        descricao,
+        cor,
+      });
+
+      if (res?.success && res.conta) {
+        await carregarContas(usuarioLogado.id);
+        selecionarConta(res.conta);
+        setIsAccountModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Erro ao criar conta:', err);
+    }
+  };
+
+  // Carrega Etiquetas Reutilizáveis
+  const carregarEtiquetas = async (usrId) => {
+    if (!usrId || !window.apiTurso) return;
+    try {
+      const res = await window.apiTurso.carregarEtiquetas({ usuarioId: usrId });
+      setEtiquetaList(Array.isArray(res) && res.length > 0 ? res : ['Geral']);
+    } catch (err) {
+      console.error('Erro ao carregar etiquetas:', err);
+      setEtiquetaList(['Geral']);
+    }
+  };
+
+  const adicionarEtiqueta = async (nomeEtiq) => {
+    if (!usuarioLogado || !nomeEtiq || !window.apiTurso) return;
+    try {
+      await window.apiTurso.adicionarEtiqueta({ usuarioId: usuarioLogado.id, nome: nomeEtiq });
+      await carregarEtiquetas(usuarioLogado.id);
+    } catch (err) {
+      console.error('Erro ao adicionar etiqueta:', err);
+    }
+  };
+
+  // Carrega Categorias
+  const carregarCategorias = async (usrId) => {
+    if (!usrId || !window.apiTurso) return;
+    try {
+      const cats = await window.apiTurso.carregarCategorias({ usuarioId: usrId });
+      setCategorias(Array.isArray(cats) ? cats : []);
+    } catch (err) {
+      console.error('Erro ao carregar categorias:', err);
+      setCategorias([]);
+    }
+  };
+
+  // Carrega Transações
+  const carregarTransacoes = async () => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      const res = await window.apiTurso.carregarTransacoes({
+        usuarioId: usuarioLogado.id,
+        contaId: contaAtiva?.id,
+        mes: mesSelecionado,
+        ano: anoSelecionado,
+      });
+      setReceitas(Array.isArray(res?.receitas) ? res.receitas : []);
+      setDespesas(Array.isArray(res?.despesas) ? res.despesas : []);
+    } catch (err) {
+      console.error('Erro ao carregar transações:', err);
       setReceitas([]);
       setDespesas([]);
-      return;
-    }
-
-    if (window.apiTurso) {
-      setLoading(true);
-      try {
-        const dados = await window.apiTurso.carregarTransacoes(usuarioLogado.id, mesSelecionado, anoSelecionado);
-        setReceitas(dados.receitas || []);
-        setDespesas(dados.despesas || []);
-      } catch (err) {
-        console.error('Erro ao buscar dados do Turso:', err);
-      } finally {
-        setLoading(false);
-      }
     }
   };
 
   useEffect(() => {
-    carregarCategoriasDoBanco();
-    carregarTransacoesDoBanco();
-  }, [usuarioLogado, mesSelecionado, anoSelecionado]);
-
-  // Login
-  const login = async ({ email, senha }) => {
-    if (window.apiTurso) {
-      const res = await window.apiTurso.loginUsuario({ email, senha });
-      if (res.success) {
-        setUsuarioLogado(res.user);
-        localStorage.setItem('usuarioLogado', JSON.stringify(res.user));
-        return { success: true };
-      }
-      return { success: false, error: res.error };
+    if (usuarioLogado?.id) {
+      carregarContas(usuarioLogado.id);
+      carregarCategorias(usuarioLogado.id);
+      carregarEtiquetas(usuarioLogado.id);
     }
-    return { success: false, error: 'API do Turso não disponível.' };
-  };
+  }, [usuarioLogado?.id]);
 
-  // Registro
-  const registrar = async ({ nome, email, senha }) => {
-    if (window.apiTurso) {
-      const res = await window.apiTurso.registrarUsuario({ nome, email, senha });
-      if (res.success) {
-        setUsuarioLogado(res.user);
-        localStorage.setItem('usuarioLogado', JSON.stringify(res.user));
-        return { success: true };
-      }
-      return { success: false, error: res.error };
+  useEffect(() => {
+    if (usuarioLogado?.id) {
+      carregarTransacoes();
     }
-    return { success: false, error: 'API do Turso não disponível.' };
-  };
+  }, [usuarioLogado?.id, contaAtiva?.id, anoSelecionado, mesSelecionado]);
 
-  // Logout
-  const logout = () => {
-    setUsuarioLogado(null);
-    setReceitas([]);
-    setDespesas([]);
-    setCategorias([]);
-    localStorage.removeItem('usuarioLogado');
-  };
-
-  // Adicionar Nova Categoria Customizada
-  const adicionarCategoria = async ({ nome, cor }) => {
-    if (!usuarioLogado) return;
-    if (window.apiTurso) {
-      const res = await window.apiTurso.adicionarCategoria({
-        usuarioId: usuarioLogado.id,
-        nome,
-        cor,
-      });
-      if (res.success) {
-        await carregarCategoriasDoBanco();
-      }
-    }
-  };
-
-  // Deletar Categoria
-  const deletarCategoria = async (id) => {
-    if (!usuarioLogado) return;
-    if (window.apiTurso) {
-      const res = await window.apiTurso.deletarCategoria(id, usuarioLogado.id);
-      if (res.success) {
-        await carregarCategoriasDoBanco();
-      }
-    }
-  };
-
-  // Adicionar Ano
-  const adicionarAno = () => {
-    const ultimoAno = parseInt(anos[anos.length - 1], 10);
-    const novoAno = (ultimoAno + 1).toString();
-    setAnos([...anos, novoAno]);
-    setAnoSelecionado(novoAno);
-  };
-
-  // Adicionar Transação
   const adicionarTransacao = async (novaTransacao) => {
-    if (!usuarioLogado) return;
+    if (!usuarioLogado || !window.apiTurso) return;
 
-    const mesOrigemCalculado = (novaTransacao.mesPersonalizado && novaTransacao.mesPersonalizado !== 'Todos')
-      ? novaTransacao.mesPersonalizado
-      : (mesSelecionado !== 'Todos' ? mesSelecionado : mesesNomes[new Date().getMonth()]);
+    try {
+      const res = await window.apiTurso.adicionarTransacao({
+        ...novaTransacao,
+        usuarioId: usuarioLogado.id,
+        contaId: contaAtiva?.id,
+        mes: novaTransacao.mesPersonalizado || mesSelecionado,
+        ano: novaTransacao.ano || anoSelecionado,
+      });
 
-    const itemParaSalvar = {
-      ...novaTransacao,
-      usuarioId: usuarioLogado.id,
-      mes: mesOrigemCalculado,
-      ano: anoSelecionado,
-    };
-
-    if (window.apiTurso) {
-      const res = await window.apiTurso.adicionarTransacao(itemParaSalvar);
-      if (res.success) {
-        await carregarTransacoesDoBanco();
+      if (res?.success) {
+        if (res.mesCalculado) setMesSelecionado(res.mesCalculado);
+        if (res.anoCalculado) setAnoSelecionado(res.anoCalculado);
+        await carregarTransacoes();
+        await carregarEtiquetas(usuarioLogado.id);
       }
+    } catch (err) {
+      console.error('Erro ao adicionar transação:', err);
     }
   };
 
-  // Editar Transação
   const editarTransacao = async (dadosEdicao) => {
-    if (!usuarioLogado) return;
-
-    const itemParaSalvar = {
-      ...dadosEdicao,
-      usuarioId: usuarioLogado.id,
-    };
-
-    if (window.apiTurso) {
-      const res = await window.apiTurso.editarTransacao(itemParaSalvar);
-      if (res.success) {
-        await carregarTransacoesDoBanco();
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      const res = await window.apiTurso.editarTransacao({
+        ...dadosEdicao,
+        usuarioId: usuarioLogado.id,
+      });
+      if (res?.success) {
+        await carregarTransacoes();
+        await carregarEtiquetas(usuarioLogado.id);
       }
+      return res;
+    } catch (err) {
+      console.error('Erro ao editar transação:', err);
     }
   };
 
-  // Deletar Transação
-  const deletarTransacao = async (id, opcoes = {}) => {
-    if (!usuarioLogado) return;
-
-    if (window.apiTurso) {
-      const res = await window.apiTurso.deletarTransacao(id, usuarioLogado.id, opcoes);
-      if (res.success) {
-        await carregarTransacoesDoBanco();
-      }
+  const deletarTransacao = async (id, opcoesExtra = {}) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      await window.apiTurso.deletarTransacao({
+        id,
+        usuarioId: usuarioLogado.id,
+        ...opcoesExtra,
+      });
+      await carregarTransacoes();
+    } catch (err) {
+      console.error('Erro ao deletar transação:', err);
     }
   };
 
-  // Exportar Excel (CSV)
+  const adicionarCategoria = async ({ nome, cor }) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      await window.apiTurso.adicionarCategoria({ usuarioId: usuarioLogado.id, nome, cor });
+      await carregarCategorias(usuarioLogado.id);
+    } catch (err) {
+      console.error('Erro ao adicionar categoria:', err);
+    }
+  };
+
+  const deletarCategoria = async (catId) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      await window.apiTurso.deletarCategoria({ id: catId, usuarioId: usuarioLogado.id });
+      await carregarCategorias(usuarioLogado.id);
+    } catch (err) {
+      console.error('Erro ao deletar categoria:', err);
+    }
+  };
+
   const exportarCSV = async () => {
-    if (!usuarioLogado || !window.apiTurso) return;
-
-    const dadosUnificados = [
-      ...receitas.map((r) => ({ ...r, tipo: 'receitas' })),
-      ...despesas.map((d) => ({ ...d, tipo: 'despesas' })),
+    if (!window.apiTurso) return;
+    const dadosCombinados = [
+      ...(receitas || []).map((r) => ({ ...r, tipo: 'receitas' })),
+      ...(despesas || []).map((d) => ({ ...d, tipo: 'despesas' })),
     ];
-
     return await window.apiTurso.exportarCSV({
-      dados: dadosUnificados,
+      dados: dadosCombinados,
       mes: mesSelecionado,
       ano: anoSelecionado,
     });
   };
 
-  // Exportar PDF Executivo
   const exportarPDF = async () => {
-    if (!usuarioLogado || !window.apiTurso) return;
-
-    const totalRec = receitas.reduce((acc, item) => acc + Number(item.valor), 0);
-    const totalDesp = despesas.reduce((acc, item) => acc + Number(item.valor), 0);
-
+    if (!window.apiTurso) return;
     return await window.apiTurso.exportarPDF({
-      receitasList: receitas,
-      despesasList: despesas,
-      categorias,
+      receitasList: receitas || [],
+      despesasList: despesas || [],
+      categorias: categorias || [],
       mes: mesSelecionado,
       ano: anoSelecionado,
-      totalReceitas: totalRec,
-      totalDespesas: totalDesp,
-      economia: totalRec - totalDesp,
-      usuarioNome: usuarioLogado.nome,
+      totalReceitas,
+      totalDespesas,
+      economia,
+      usuarioNome: usuarioLogado?.nome || '',
     });
   };
 
-  // --- CÁLCULOS E FILTROS ---
-
-  const transacoesTabela = abaAtiva === 'receitas' ? receitas : despesas;
-
-  const totalReceitas = receitas.reduce((acc, item) => acc + Number(item.valor), 0);
-  const totalDespesas = despesas.reduce((acc, item) => acc + Number(item.valor), 0);
+  const totalReceitas = (receitas || []).reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+  const totalDespesas = (despesas || []).reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
   const economia = totalReceitas - totalDespesas;
+  const transacoesTabela = abaAtiva === 'receitas' ? (receitas || []) : (despesas || []);
 
   return (
     <BudgetContext.Provider
@@ -259,44 +320,48 @@ export function BudgetProvider({ children }) {
         login,
         registrar,
         logout,
-        anos,
+        contas: contas || [],
+        contaAtiva,
+        selecionarConta,
+        criarNovaConta,
+        isAccountModalOpen,
+        setIsAccountModalOpen,
+        isComercial,
+        isIndividual,
         anoSelecionado,
         setAnoSelecionado,
-        adicionarAno,
         mesSelecionado,
         setMesSelecionado,
         abaAtiva,
         setAbaAtiva,
+        receitas: receitas || [],
+        despesas: despesas || [],
+        categorias: categorias || [],
+        etiquetaList: etiquetaList || ['Geral'],
+        carregarEtiquetas,
+        adicionarEtiqueta,
+        transacoesTabela: transacoesTabela || [],
+        totalReceitas,
+        totalDespesas,
+        economia,
         isModalOpen,
         setIsModalOpen,
         isCategoryModalOpen,
         setIsCategoryModalOpen,
-        categorias,
-        adicionarCategoria,
-        deletarCategoria,
-        transacoesTabela,
-        receitas,
-        despesas,
-        totalReceitas,
-        totalDespesas,
-        economia,
-        loading,
         adicionarTransacao,
         editarTransacao,
         deletarTransacao,
+        adicionarCategoria,
+        deletarCategoria,
         exportarCSV,
         exportarPDF,
+        ANOS_LISTA,
+        MESES_LISTA,
       }}
     >
       {children}
     </BudgetContext.Provider>
   );
-}
+};
 
-export function useBudget() {
-  const context = useContext(BudgetContext);
-  if (!context) {
-    throw new Error('useBudget deve ser usado dentro de um BudgetProvider');
-  }
-  return context;
-}
+export const useBudget = () => useContext(BudgetContext);

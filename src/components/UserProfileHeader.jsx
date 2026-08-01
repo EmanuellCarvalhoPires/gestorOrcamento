@@ -1,199 +1,316 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
-import iconUser from '../../images/Icone de User.png';
+import AccountManagerModal from './AccountManagerModal';
 
 export default function UserProfileHeader() {
-  const { usuarioLogado, logout, exportarCSV, exportarPDF } = useBudget();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const {
+    usuarioLogado,
+    contas = [],
+    contaAtiva,
+    selecionarConta,
+    criarNovaConta,
+    isAccountModalOpen,
+    setIsAccountModalOpen,
+    isComercial,
+    logout,
+    exportarCSV,
+    exportarPDF,
+  } = useBudget();
 
-  // Fecha o dropdown se o usuário clicar fora dele
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [mensagemExport, setMensagemExport] = useState('');
 
   if (!usuarioLogado) return null;
 
+  const listContas = Array.isArray(contas) ? contas : [];
+
+  const handleExportCSV = async () => {
+    setIsDropdownOpen(false);
+    setMensagemExport('Exportando planilha Excel...');
+    const res = await exportarCSV();
+    if (res?.success) {
+      setMensagemExport('✅ Excel exportado com sucesso!');
+    } else {
+      setMensagemExport('');
+    }
+    setTimeout(() => setMensagemExport(''), 4000);
+  };
+
+  const handleExportPDF = async () => {
+    setIsDropdownOpen(false);
+    setMensagemExport('Gerando relatório PDF...');
+    const res = await exportarPDF();
+    if (res?.success) {
+      setMensagemExport('✅ PDF exportado com sucesso!');
+    } else {
+      setMensagemExport('');
+    }
+    setTimeout(() => setMensagemExport(''), 4000);
+  };
+
   return (
-    <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
-      {/* Botão com Avatar e Nome do Usuário */}
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+      
+      {/* Toast Notificação de Exportação */}
+      {mensagemExport && (
+        <div
+          style={{
+            backgroundColor: '#2a9d8f',
+            color: '#ffffff',
+            padding: '6px 14px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}
+        >
+          {mensagemExport}
+        </div>
+      )}
+
+      {/* Indicador da Conta Ativa */}
+      <div
+        style={{
+          backgroundColor: '#3e3e3e',
+          border: '1px solid #737373',
+          padding: '4px 14px',
+          borderRadius: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '12px',
+          color: '#ffffff',
+        }}
+      >
+        <span
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: contaAtiva?.cor || (isComercial ? '#fb8500' : '#2a9d8f'),
+          }}
+        />
+        <span style={{ fontWeight: 'bold', color: '#ffe192' }}>
+          {contaAtiva?.nome || 'Conta Principal'}
+        </span>
+      </div>
+
+      {/* Botão de Perfil */}
       <button
-        onClick={() => setMenuOpen(!menuOpen)}
+        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: '#545454',
+          backgroundColor: '#3e3e3e',
           border: '1px solid #737373',
           padding: '6px 14px',
-          borderRadius: '24px',
+          borderRadius: '20px',
+          color: '#ffffff',
           cursor: 'pointer',
-          color: '#ffe192',
-          fontWeight: '600',
           transition: 'background-color 0.2s',
         }}
       >
-        <img
-          src={iconUser}
-          alt="Avatar do Usuário"
-          style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
-        />
-        <span style={{ fontSize: '14px' }}>{usuarioLogado.nome}</span>
+        <div
+          style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            backgroundColor: '#ffe192',
+            color: '#333333',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            fontSize: '13px',
+          }}
+        >
+          {usuarioLogado.nome ? usuarioLogado.nome.charAt(0).toUpperCase() : 'U'}
+        </div>
+        <span style={{ fontSize: '14px', fontWeight: '500' }}>{usuarioLogado.nome}</span>
         <span style={{ fontSize: '10px', color: '#aaaaaa' }}>▼</span>
       </button>
 
-      {/* Menu Dropdown Suspenso do Perfil */}
-      {menuOpen && (
+      {/* Dropdown Menu de Perfil e Múltiplas Contas */}
+      {isDropdownOpen && (
         <div
           style={{
             position: 'absolute',
-            top: '46px',
+            top: '48px',
             right: 0,
             backgroundColor: '#545454',
-            border: '1px solid #737373',
-            borderRadius: '12px',
-            width: '230px',
+            borderRadius: '16px',
+            padding: '10px 0',
+            width: '260px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             zIndex: 1000,
-            padding: '8px 0',
-            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          {/* Cabeçalho do Perfil */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #666666' }}>
-            <div style={{ fontWeight: 'bold', color: '#ffe192', fontSize: '14px' }}>
-              {usuarioLogado.nome}
-            </div>
-            <div style={{ color: '#aaaaaa', fontSize: '12px', wordBreak: 'break-all' }}>
-              {usuarioLogado.email}
-            </div>
+          <div
+            style={{
+              padding: '8px 16px',
+              borderBottom: '1px solid #666666',
+              fontSize: '12px',
+              color: '#cccccc',
+            }}
+          >
+            Usuário:<br />
+            <strong style={{ color: '#ffe192', fontSize: '13px' }}>{usuarioLogado.email}</strong>
           </div>
 
-          {/* Opções de Perfil e Configurações */}
-          <button
-            onClick={() => {
-              alert(`Perfil de ${usuarioLogado.nome}\nE-mail: ${usuarioLogado.email}`);
-              setMenuOpen(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '10px 16px',
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#ffffff',
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            👤 Ver Meu Perfil
-          </button>
+          {/* SEÇÃO: Minhas Contas */}
+          <div style={{ padding: '8px 16px 4px 16px', fontSize: '11px', color: '#ffe192', fontWeight: 'bold', textTransform: 'uppercase' }}>
+            Minhas Contas ({listContas.length})
+          </div>
 
+          <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
+            {listContas.map((c) => {
+              const ehAtiva = contaAtiva?.id === c.id;
+              const ehCom = c.tipo === 'comercial';
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    selecionarConta(c);
+                    setIsDropdownOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 16px',
+                    backgroundColor: ehAtiva ? '#666666' : 'transparent',
+                    border: 'none',
+                    color: ehAtiva ? '#ffe192' : '#ffffff',
+                    textAlign: 'left',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background-color 0.2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: c.cor || '#ffe192' }} />
+                    <span style={{ fontWeight: ehAtiva ? 'bold' : 'normal' }}>{c.nome}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '10px', color: '#aaaaaa' }}>
+                      {ehCom ? '🏢 Comercial' : '👤 Individual'}
+                    </span>
+                    {ehAtiva && <span style={{ color: '#2a9d8f', fontWeight: 'bold' }}>✓</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Botão para Criar Nova Conta */}
           <button
             onClick={() => {
-              alert('Configurações do aplicativo em desenvolvimento.');
-              setMenuOpen(false);
+              setIsDropdownOpen(false);
+              setIsAccountModalOpen(true);
             }}
             style={{
-              width: '100%',
               padding: '10px 16px',
               backgroundColor: 'transparent',
               border: 'none',
-              color: '#ffffff',
+              color: '#ffe192',
               textAlign: 'left',
-              cursor: 'pointer',
               fontSize: '13px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              marginTop: '4px',
+              borderTop: '1px solid #666666',
             }}
+            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
+            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            ⚙️ Configurações
+            ➕ Criar Nova Conta
           </button>
 
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
 
-          {/* Opções de Exportação de Relatório (Posicionadas de forma discreta) */}
+          {/* Exportações */}
           <button
-            onClick={async () => {
-              setMenuOpen(false);
-              await exportarCSV();
-            }}
+            onClick={handleExportCSV}
             style={{
-              width: '100%',
-              padding: '10px 16px',
+              padding: '8px 16px',
               backgroundColor: 'transparent',
               border: 'none',
               color: '#ffffff',
               textAlign: 'left',
-              cursor: 'pointer',
               fontSize: '13px',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
+            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
+            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            🟢 Exportar Excel (.csv)
+            📊 Exportar Excel (.csv)
           </button>
 
           <button
-            onClick={async () => {
-              setMenuOpen(false);
-              await exportarPDF();
-            }}
+            onClick={handleExportPDF}
             style={{
-              width: '100%',
-              padding: '10px 16px',
+              padding: '8px 16px',
               backgroundColor: 'transparent',
               border: 'none',
               color: '#ffffff',
               textAlign: 'left',
-              cursor: 'pointer',
               fontSize: '13px',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
+            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
+            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            🔴 Exportar PDF (.pdf)
+            📄 Exportar PDF Executivo
           </button>
 
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
 
-          {/* Botão de Logout */}
+          {/* Sair da Conta */}
           <button
             onClick={() => {
-              setMenuOpen(false);
+              setIsDropdownOpen(false);
               logout();
             }}
             style={{
-              width: '100%',
-              padding: '10px 16px',
+              padding: '8px 16px',
               backgroundColor: 'transparent',
               border: 'none',
-              color: '#ff6b6b',
-              fontWeight: 'bold',
+              color: '#ff8585',
               textAlign: 'left',
-              cursor: 'pointer',
               fontSize: '13px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
+            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
+            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
             🚪 Sair da Conta
           </button>
         </div>
       )}
+
+      {/* Modal para Criar Nova Conta */}
+      <AccountManagerModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        onCreateAccount={criarNovaConta}
+      />
     </div>
   );
 }

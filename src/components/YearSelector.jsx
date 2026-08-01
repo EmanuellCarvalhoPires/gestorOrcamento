@@ -1,12 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function YearSelector() {
-  const { anos, anoSelecionado, setAnoSelecionado, adicionarAno } = useBudget();
+  const { ANOS_LISTA, anoSelecionado, setAnoSelecionado } = useBudget();
+  const [anosLocais, setAnosLocais] = useState(ANOS_LISTA || ['2024', '2025', '2026', '2027']);
+
+  const handleAdicionarAno = () => {
+    const ultimoAno = anosLocais[anosLocais.length - 1] || '2026';
+    const proximoAno = (parseInt(ultimoAno, 10) + 1).toString();
+    const novaLista = [...anosLocais, proximoAno];
+    setAnosLocais(novaLista);
+    setAnoSelecionado(proximoAno);
+  };
 
   return (
     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-      {anos.map((ano) => {
+      {(anosLocais || []).map((ano) => {
         const isSelected = anoSelecionado === ano;
 
         return (
@@ -31,7 +40,7 @@ export default function YearSelector() {
       })}
 
       <button
-        onClick={adicionarAno}
+        onClick={handleAdicionarAno}
         title="Adicionar novo ano"
         style={{
           width: '36px',
