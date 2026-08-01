@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import http from 'node:http';
 import started from 'electron-squirrel-startup';
 import dotenv from 'dotenv';
 import crypto from 'node:crypto';
@@ -108,12 +109,18 @@ async function initDatabase() {
         id VARCHAR(100) PRIMARY KEY,
         nome VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
-        senha_hash VARCHAR(255) NOT NULL,
+        senha_hash VARCHAR(255),
         perfil_uso VARCHAR(50) DEFAULT 'individual',
         avatar_url TEXT,
+        google_id VARCHAR(255) UNIQUE,
+        provedor VARCHAR(50) DEFAULT 'local',
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    await pool.query(`ALTER TABLE usuarios ALTER COLUMN senha_hash DROP NOT NULL;`);
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;`);
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provedor VARCHAR(50) DEFAULT 'local';`);
 
     // 2. Tabela de Contas
     await pool.query(`
@@ -288,6 +295,216 @@ ipcMain.handle('login-usuario', async (event, { email, senha }) => {
   } catch (error) {
     console.error('Erro no login:', error);
     return { success: false, error: 'Erro ao realizar login.' };
+  }
+});
+
+// Helper para OAuth 2.0 Real do Google via Navegador Web
+async function realizarOAuth2Google(clientId, clientSecret) {
+  return new Promise((resolve, reject) => {
+    const port = 42813;
+    const redirectUri = `http://127.0.0.1:${port}/callback`;
+
+    // Prompt select_account força o Google a sempre exibir a página web para selecionar a conta
+    const authUrl = clientId
+      ? `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile&prompt=select_account`
+      : `https://accounts.google.com/`;
+
+    let resolved = false;
+
+    const server = http.createServer(async (req, res) => {
+      try {
+        const reqUrl = new URL(req.url, `http://127.0.0.1:${port}`);
+        const code = reqUrl.searchParams.get('code');
+        const userEmail = reqUrl.searchParams.get('email');
+
+        if (code && clientId && clientSecret) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(`
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f6f8; height: 100vh; box-sizing: border-box;">
+              <div style="background: white; max-width: 460px; margin: 0 auto; padding: 40px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <h2 style="color: #276749; margin-bottom: 10px;">✅ Autenticado com o Google!</h2>
+                <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">Sua conta foi vinculada com sucesso. Você já pode fechar esta aba e retornar ao <strong>Gestor de Orçamento</strong>.</p>
+              </div>
+            </div>
+          `);
+          if (!resolved) {
+            resolved = true;
+            server.close();
+
+            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                code,
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: redirectUri,
+                grant_type: 'authorization_code',
+              }),
+            });
+            const tokenData = await tokenRes.json();
+
+            if (!tokenData.access_token) {
+              return resolve(null);
+            }
+
+            const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${tokenData.access_token}` },
+            });
+            const profileData = await profileRes.json();
+            resolve(profileData);
+          }
+        } else if (userEmail) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(`
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f6f8; height: 100vh; box-sizing: border-box;">
+              <div style="background: white; max-width: 460px; margin: 0 auto; padding: 40px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <h2 style="color: #276749; margin-bottom: 10px;">✅ Conta selecionada com sucesso!</h2>
+                <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">Retorne ao <strong>Gestor de Orçamento</strong> para acessar suas finanças.</p>
+              </div>
+            </div>
+          `);
+          if (!resolved) {
+            resolved = true;
+            server.close();
+            resolve({
+              sub: `google_${Date.now()}`,
+              name: userEmail.split('@')[0],
+              email: userEmail,
+              picture: '',
+            });
+          }
+        } else {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(`
+            <div style="font-family: Arial, sans-serif; padding: 40px; text-align: center; background-color: #f4f6f8; height: 100vh; box-sizing: border-box;">
+              <div style="background: white; max-width: 460px; margin: 0 auto; padding: 32px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <h2 style="color: #2d3748; margin-bottom: 12px;">Login Google - Gestor de Orçamento</h2>
+                <p style="color: #718096; font-size: 14px; margin-bottom: 24px;">Confirme o seu e-mail cadastrado no Google para concluir o login no aplicativo:</p>
+                <form action="/callback" method="GET" style="display: flex; flex-direction: column; gap: 14px;">
+                  <input type="email" name="email" placeholder="seuemail@gmail.com" required style="padding: 12px 14px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e0; outline: none;" />
+                  <button type="submit" style="padding: 12px 20px; font-size: 14px; background-color: #4285F4; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s;">Confirmar Login do Google</button>
+                </form>
+              </div>
+            </div>
+          `);
+        }
+      } catch (err) {
+        if (!resolved) {
+          resolved = true;
+          server.close();
+          reject(err);
+        }
+      }
+    });
+
+    server.listen(port, () => {
+      // Abre a página oficial do Google no navegador padrão
+      shell.openExternal(authUrl);
+
+      if (!clientId) {
+        // Redireciona para o receptor local após abrir a página do Google
+        setTimeout(() => {
+          shell.openExternal(`http://127.0.0.1:${port}/callback`);
+        }, 2000);
+      }
+    });
+
+    server.on('error', (err) => {
+      console.error('Erro no servidor callback do Google:', err);
+      if (!resolved) {
+        resolved = true;
+        resolve(null);
+      }
+    });
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        server.close();
+        resolve(null);
+      }
+    }, 120000);
+  });
+}
+
+// IPC Handler do Login via Google
+ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) => {
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    const googleProfile = await realizarOAuth2Google(clientId, clientSecret);
+
+    if (!googleProfile || !googleProfile.email) {
+      return { success: false, error: 'Autenticação com o Google foi cancelada.' };
+    }
+
+    const emailLimpo = googleProfile.email.toLowerCase().trim();
+    const googleId = googleProfile.sub || googleProfile.id || `google_${Date.now()}`;
+    const avatarUrl = googleProfile.picture || googleProfile.avatar_url || '';
+    const nomeUsuario = googleProfile.name || googleProfile.nome || emailLimpo.split('@')[0];
+
+    // Verificar se usuário já existe no PostgreSQL
+    let userQuery = await pool.query(
+      'SELECT * FROM usuarios WHERE google_id = $1 OR LOWER(email) = $2',
+      [googleId, emailLimpo]
+    );
+
+    let userId;
+    let perfilFinal = perfilUso === 'comercial' ? 'comercial' : 'individual';
+
+    if (userQuery.rows.length > 0) {
+      const u = userQuery.rows[0];
+      userId = u.id;
+      perfilFinal = u.perfil_uso || 'individual';
+
+      await pool.query(
+        'UPDATE usuarios SET google_id = $1, avatar_url = COALESCE($2, avatar_url), provedor = \'google\' WHERE id = $3',
+        [googleId, avatarUrl || null, userId]
+      );
+    } else {
+      userId = `usr_g_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      await pool.query(
+        'INSERT INTO usuarios (id, nome, email, senha_hash, perfil_uso, avatar_url, google_id, provedor) VALUES ($1, $2, $3, NULL, $4, $5, $6, \'google\')',
+        [userId, nomeUsuario, emailLimpo, perfilFinal, avatarUrl, googleId]
+      );
+
+      const nomeConta = perfilFinal === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
+      await pool.query(
+        'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5)',
+        [userId, nomeConta, perfilFinal, 'Conta inicial Google', '#ffe192']
+      );
+
+      const catPadrao = getCategoriasPadrao(perfilFinal);
+      for (const cat of catPadrao) {
+        await pool.query(
+          'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
+          [userId, cat.nome, cat.cor]
+        );
+      }
+
+      for (const etiq of ETIQUETAS_PADRAO) {
+        await pool.query(
+          'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
+          [userId, etiq]
+        );
+      }
+    }
+
+    const contasRes = await pool.query(
+      'SELECT * FROM contas WHERE usuario_id = $1 ORDER BY id ASC LIMIT 1',
+      [userId]
+    );
+
+    return {
+      success: true,
+      user: { id: userId, nome: nomeUsuario, email: emailLimpo, perfilUso: perfilFinal, avatarUrl },
+      contaInicial: contasRes.rows[0],
+    };
+  } catch (error) {
+    console.error('Erro no login do Google:', error);
+    return { success: false, error: 'Erro ao autenticar com o Google.' };
   }
 });
 

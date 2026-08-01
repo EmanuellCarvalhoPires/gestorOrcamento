@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import appIcon from '../../images/app_icon.jpg';
+import logoGoogle from '../../images/Logo google.png';
 
 export default function AuthView() {
-  const { login, registrar } = useBudget();
+  const { login, loginGoogle, registrar } = useBudget();
   const [isRegistro, setIsRegistro] = useState(false);
 
   const [nome, setNome] = useState('');
@@ -41,6 +42,16 @@ export default function AuthView() {
       }
     }
 
+    setLoading(false);
+  };
+
+  const handleGoogleLogin = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    const res = await loginGoogle({ perfilUso });
+    if (!res?.success) {
+      setErrorMsg(res?.error || 'Erro ao realizar login com o Google.');
+    }
     setLoading(false);
   };
 
@@ -266,6 +277,40 @@ export default function AuthView() {
             {loading ? 'Processando...' : isRegistro ? 'Criar Conta' : 'Entrar no Sistema'}
           </button>
         </form>
+
+        {/* Divisor Visual */}
+        <div style={{ display: 'flex', alignItems: 'center', width: '100%', margin: '18px 0 14px 0', gap: '10px' }}>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
+          <span style={{ fontSize: '11px', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: '1px' }}>ou</span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
+        </div>
+
+        {/* Botão Entrar com o Google */}
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            borderRadius: '24px',
+            border: '1px solid #737373',
+            backgroundColor: '#ffffff',
+            color: '#222222',
+            fontWeight: '600',
+            fontSize: '14px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            transition: 'all 0.2s',
+          }}
+        >
+          <img src={logoGoogle} alt="Google Logo" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+          <span>Continuar com o Google</span>
+        </button>
 
         {/* Alternar entre Login e Cadastro */}
         <div style={{ marginTop: '20px', textAlign: 'center' }}>

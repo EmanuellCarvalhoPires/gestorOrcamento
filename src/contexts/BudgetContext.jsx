@@ -85,6 +85,27 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
+  // Login via Google (Chamado por AuthView)
+  const loginGoogle = async ({ perfilUso } = {}) => {
+    if (!window.apiTurso) return { success: false, error: 'API indisponível.' };
+    try {
+      const res = await window.apiTurso.loginGoogle({ perfilUso });
+      if (res?.success && res.user) {
+        setUsuarioLogado(res.user);
+        localStorage.setItem('@gestor_usuario', JSON.stringify(res.user));
+        if (res.contaInicial) {
+          setContaAtiva(res.contaInicial);
+          localStorage.setItem('@gestor_conta_ativa', JSON.stringify(res.contaInicial));
+        }
+        return { success: true };
+      }
+      return { success: false, error: res?.error || 'Erro ao realizar login com o Google.' };
+    } catch (err) {
+      console.error('Erro no login do Google:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   const logout = () => {
     setUsuarioLogado(null);
     setContas([]);
@@ -318,6 +339,7 @@ export const BudgetProvider = ({ children }) => {
       value={{
         usuarioLogado,
         login,
+        loginGoogle,
         registrar,
         logout,
         contas: contas || [],

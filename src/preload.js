@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('apiTurso', {
   registrarUsuario: (dados) => ipcRenderer.invoke('registrar-usuario', dados),
   loginUsuario: (dados) => ipcRenderer.invoke('login-usuario', dados),
+  loginGoogle: (dados) => ipcRenderer.invoke('login-google', dados),
   carregarContas: (dados) => ipcRenderer.invoke('carregar-contas', dados),
   criarConta: (dados) => ipcRenderer.invoke('criar-conta', dados),
   deletarConta: (dados) => ipcRenderer.invoke('deletar-conta', dados),
