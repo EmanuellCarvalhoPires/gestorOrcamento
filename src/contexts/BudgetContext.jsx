@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiService } from '../services/api.js';
 
 const BudgetContext = createContext();
 
@@ -49,9 +50,11 @@ export const BudgetProvider = ({ children }) => {
 
   // Login de Usuário (Chamado por AuthView)
   const login = async ({ email, senha }) => {
-    if (!window.apiTurso) return { success: false, error: 'API indisponível.' };
     try {
-      const res = await window.apiTurso.loginUsuario({ email, senha });
+      let res = await apiService.loginUsuario({ email, senha });
+      if (!res?.success && window.apiTurso) {
+        res = await window.apiTurso.loginUsuario({ email, senha });
+      }
       if (res?.success && res.user) {
         setUsuarioLogado(res.user);
         localStorage.setItem('@gestor_usuario', JSON.stringify(res.user));
@@ -66,9 +69,11 @@ export const BudgetProvider = ({ children }) => {
 
   // Registro de Usuário (Chamado por AuthView)
   const registrar = async ({ nome, email, senha, perfilUso }) => {
-    if (!window.apiTurso) return { success: false, error: 'API indisponível.' };
     try {
-      const res = await window.apiTurso.registrarUsuario({ nome, email, senha, perfilUso });
+      let res = await apiService.registrarUsuario({ nome, email, senha, perfilUso });
+      if (!res?.success && window.apiTurso) {
+        res = await window.apiTurso.registrarUsuario({ nome, email, senha, perfilUso });
+      }
       if (res?.success && res.user) {
         setUsuarioLogado(res.user);
         localStorage.setItem('@gestor_usuario', JSON.stringify(res.user));
@@ -106,7 +111,8 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await apiService.logoutUsuario();
     setUsuarioLogado(null);
     setContas([]);
     setContaAtiva(null);

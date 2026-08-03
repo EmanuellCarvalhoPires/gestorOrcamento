@@ -1,24 +1,87 @@
 import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
+import { apiService } from '../services/api';
 import appIcon from '../../images/app_icon.jpg';
-import logoGoogle from '../../images/Logo google.png';
+import logoGoogle from '../../images/Logo google - fundo branco.png';
 
 export default function AuthView() {
   const { login, loginGoogle, registrar } = useBudget();
   const [isRegistro, setIsRegistro] = useState(false);
+  const [isEsqueciSenha, setIsEsqueciSenha] = useState(false);
+  const [passoRecuperacao, setPassoRecuperacao] = useState(1); // 1 = solicitar e-mail, 2 = digitar código e nova senha
 
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [perfilUso, setPerfilUso] = useState('individual'); // 'individual' ou 'comercial'
+  const [novaSenha, setNovaSenha] = useState('');
+  const [codigoRecuperacao, setCodigoRecuperacao] = useState('');
+  const [perfilUso, setPerfilUso] = useState('individual');
   
+  const [showSenha, setShowSenha] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
     setLoading(true);
+
+    if (isEsqueciSenha) {
+      if (passoRecuperacao === 1) {
+        if (!email.trim()) {
+          setErrorMsg('Digite seu e-mail cadastrado.');
+          setLoading(false);
+          return;
+        }
+        try {
+          const res = await apiService.solicitarRecuperacaoSenha({ email });
+          if (res?.success) {
+            setSuccessMsg(res.message || 'Código de 6 dígitos enviado para seu e-mail.');
+            setPassoRecuperacao(2);
+            setCodigoRecuperacao('');
+            if (res.previewUrl) setPreviewUrl(res.previewUrl);
+          } else {
+            setErrorMsg(res?.error || 'Erro ao enviar e-mail de recuperação.');
+          }
+        } catch (err) {
+          setErrorMsg(err.message || 'Erro ao solicitar e-mail de recuperação.');
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (passoRecuperacao === 2) {
+        if (!codigoRecuperacao.trim() || !novaSenha.trim()) {
+          setErrorMsg('Preencha o código de 6 dígitos e a nova senha.');
+          setLoading(false);
+          return;
+        }
+        try {
+          const res = await apiService.confirmarRecuperacaoSenha({
+            email,
+            codigo: codigoRecuperacao,
+            novaSenha,
+          });
+          if (res?.success) {
+            setSuccessMsg(res.message || 'Senha redefinida com sucesso!');
+            setIsEsqueciSenha(false);
+            setPassoRecuperacao(1);
+            setSenha(novaSenha);
+            setNovaSenha('');
+            setCodigoRecuperacao('');
+          } else {
+            setErrorMsg(res?.error || 'Erro ao redefinir senha.');
+          }
+        } catch (err) {
+          setErrorMsg(err.message || 'Erro ao redefinir a senha.');
+        }
+        setLoading(false);
+        return;
+      }
+    }
 
     if (isRegistro) {
       if (!nome.trim() || !email.trim() || !senha.trim()) {
@@ -58,27 +121,30 @@ export default function AuthView() {
   return (
     <div
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        minHeight: '100vh',
         backgroundColor: '#3e3e3e',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         color: '#ffffff',
         fontFamily: 'sans-serif',
+        padding: '16px',
+        boxSizing: 'border-box',
       }}
     >
       <div
         style={{
           backgroundColor: '#545454',
           borderRadius: '24px',
-          padding: '36px',
+          padding: '28px 20px',
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '400px',
           boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          boxSizing: 'border-box',
         }}
       >
         {/* Logo do Aplicativo */}
@@ -101,10 +167,14 @@ export default function AuthView() {
           Gestor de Orçamento
         </h2>
         <p style={{ margin: '0 0 24px 0', color: '#dddddd', fontSize: '14px', textAlign: 'center' }}>
-          {isRegistro ? 'Crie sua conta e escolha seu modo de uso' : 'Faça login para acessar suas finanças'}
+          {isEsqueciSenha
+            ? 'Redefina sua senha de acesso'
+            : isRegistro
+            ? 'Crie sua conta e escolha seu modo de uso'
+            : 'Faça login para acessar suas finanças'}
         </p>
 
-        {/* Mensagem de Erro */}
+        {/* Mensagens de Erro e Sucesso */}
         {errorMsg && (
           <div
             style={{
@@ -123,9 +193,27 @@ export default function AuthView() {
           </div>
         )}
 
+        {successMsg && (
+          <div
+            style={{
+              backgroundColor: '#2a9d8f',
+              color: '#ffffff',
+              padding: '10px 16px',
+              borderRadius: '12px',
+              fontSize: '13px',
+              marginBottom: '16px',
+              width: '100%',
+              textAlign: 'center',
+              fontWeight: '500',
+            }}
+          >
+            {successMsg}
+          </div>
+        )}
+
         {/* Formulário */}
         <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {isRegistro && (
+          {isRegistro && !isEsqueciSenha && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
                 Seu Nome Completo
@@ -173,87 +261,144 @@ export default function AuthView() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
-              Sua Senha
-            </label>
-            <input
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              placeholder="••••••••"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '12px',
-                border: '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffffff',
-                fontSize: '14px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          {/* Seletor de Perfil no Cadastro */}
-          {isRegistro && (
+          {!isEsqueciSenha ? (
             <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#ffe192', marginBottom: '8px', fontWeight: 'bold' }}>
-                Objetivo de Uso do App:
-              </label>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', color: '#cccccc' }}>Sua Senha</label>
+                {!isRegistro && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEsqueciSenha(true);
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ffe192',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Esqueci minha senha
+                  </button>
+                )}
+              </div>
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input
+                  type={showSenha ? 'text' : 'password'}
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  placeholder="••••••••"
+                  style={{
+                    width: '100%',
+                    padding: '12px 42px 12px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid #737373',
+                    backgroundColor: '#3e3e3e',
+                    color: '#ffffff',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
                 <button
                   type="button"
-                  onClick={() => setPerfilUso('individual')}
+                  onClick={() => setShowSenha(!showSenha)}
                   style={{
-                    flex: 1,
-                    padding: '12px 10px',
-                    borderRadius: '14px',
-                    border: perfilUso === 'individual' ? '2px solid #ffe192' : '1px solid #737373',
-                    backgroundColor: perfilUso === 'individual' ? '#666666' : '#3e3e3e',
-                    color: perfilUso === 'individual' ? '#ffe192' : '#aaaaaa',
-                    fontWeight: 'bold',
-                    fontSize: '13px',
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#cccccc',
                     cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.2s',
+                    fontSize: '16px',
                   }}
+                  title={showSenha ? 'Ocultar Senha' : 'Ver Senha'}
                 >
-                  <span style={{ fontSize: '20px' }}>👤</span>
-                  <span>Uso Individual</span>
-                  <span style={{ fontSize: '10px', fontWeight: 'normal', color: '#dddddd' }}>Finanças Pessoais</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPerfilUso('comercial')}
-                  style={{
-                    flex: 1,
-                    padding: '12px 10px',
-                    borderRadius: '14px',
-                    border: perfilUso === 'comercial' ? '2px solid #ffe192' : '1px solid #737373',
-                    backgroundColor: perfilUso === 'comercial' ? '#666666' : '#3e3e3e',
-                    color: perfilUso === 'comercial' ? '#ffe192' : '#aaaaaa',
-                    fontWeight: 'bold',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <span style={{ fontSize: '20px' }}>🏢</span>
-                  <span>Uso Comercial</span>
-                  <span style={{ fontSize: '10px', fontWeight: 'normal', color: '#dddddd' }}>Empresas & Comércio</span>
+                  {showSenha ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
+          ) : (
+            <>
+              {passoRecuperacao === 2 && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#ffe192', marginBottom: '6px', fontWeight: 'bold' }}>
+                      Código de Verificação (6 Dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={codigoRecuperacao}
+                      onChange={(e) => setCodigoRecuperacao(e.target.value)}
+                      placeholder="Ex: 123456"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '12px',
+                        border: '2px solid #ffe192',
+                        backgroundColor: '#3e3e3e',
+                        color: '#ffe192',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        letterSpacing: '4px',
+                        textAlign: 'center',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#cccccc', marginBottom: '6px' }}>
+                      Sua Nova Senha
+                    </label>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input
+                        type={showSenha ? 'text' : 'password'}
+                        value={novaSenha}
+                        onChange={(e) => setNovaSenha(e.target.value)}
+                        placeholder="Digite sua nova senha"
+                        style={{
+                          width: '100%',
+                          padding: '12px 42px 12px 14px',
+                          borderRadius: '12px',
+                          border: '1px solid #737373',
+                          backgroundColor: '#3e3e3e',
+                          color: '#ffffff',
+                          fontSize: '14px',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSenha(!showSenha)}
+                        style={{
+                          position: 'absolute',
+                          right: '10px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#cccccc',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                        }}
+                      >
+                        {showSenha ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
           )}
 
           {/* Botão Submeter */}
@@ -274,62 +419,95 @@ export default function AuthView() {
               transition: 'transform 0.1s',
             }}
           >
-            {loading ? 'Processando...' : isRegistro ? 'Criar Conta' : 'Entrar no Sistema'}
+            {loading
+              ? 'Processando...'
+              : isEsqueciSenha
+              ? passoRecuperacao === 1
+                ? 'Enviar E-mail de Recuperação'
+                : 'Confirmar Nova Senha'
+              : isRegistro
+              ? 'Criar Conta'
+              : 'Entrar no Sistema'}
           </button>
         </form>
 
         {/* Divisor Visual */}
-        <div style={{ display: 'flex', alignItems: 'center', width: '100%', margin: '18px 0 14px 0', gap: '10px' }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
-          <span style={{ fontSize: '11px', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: '1px' }}>ou</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
-        </div>
+        {!isEsqueciSenha && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', width: '100%', margin: '18px 0 14px 0', gap: '10px' }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
+              <span style={{ fontSize: '11px', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: '1px' }}>ou</span>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#737373' }} />
+            </div>
 
-        {/* Botão Entrar com o Google */}
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            borderRadius: '24px',
-            border: '1px solid #737373',
-            backgroundColor: '#ffffff',
-            color: '#222222',
-            fontWeight: '600',
-            fontSize: '14px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            transition: 'all 0.2s',
-          }}
-        >
-          <img src={logoGoogle} alt="Google Logo" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
-          <span>Continuar com o Google</span>
-        </button>
+            {/* Botão Entrar com o Google */}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '15px 20px',
+                borderRadius: '28px',
+                border: '1px solid #737373',
+                backgroundColor: '#ffffff',
+                color: '#222222',
+                fontWeight: 'bold',
+                fontSize: '15px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+                transition: 'all 0.2s',
+              }}
+            >
+              <img src={logoGoogle} alt="Google Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+              <span>Continuar com o Google</span>
+            </button>
+          </>
+        )}
 
-        {/* Alternar entre Login e Cadastro */}
+        {/* Alternar entre Login, Cadastro e Esqueci Senha */}
         <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button
-            onClick={() => {
-              setIsRegistro(!isRegistro);
-              setErrorMsg('');
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#aaaaaa',
-              fontSize: '13px',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-            }}
-          >
-            {isRegistro ? 'Já possui uma conta? Faça Login' : 'Ainda não tem conta? Cadastre-se'}
-          </button>
+          {isEsqueciSenha ? (
+            <button
+              onClick={() => {
+                setIsEsqueciSenha(false);
+                setErrorMsg('');
+                setSuccessMsg('');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ffe192',
+                fontSize: '13px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Voltar para o Login
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setIsRegistro(!isRegistro);
+                setErrorMsg('');
+                setSuccessMsg('');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#aaaaaa',
+                fontSize: '13px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              {isRegistro ? 'Já possui uma conta? Faça Login' : 'Ainda não tem conta? Cadastre-se'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -29,6 +29,8 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
+import bcrypt from 'bcryptjs';
+
 // Hashing de senha seguro via PBKDF2 com Salt
 function hashSenha(senha, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.pbkdf2Sync(senha, salt, 1000, 64, 'sha512').toString('hex');
@@ -36,10 +38,16 @@ function hashSenha(senha, salt = crypto.randomBytes(16).toString('hex')) {
 }
 
 function verificarSenha(senhaDigitada, hashSalvo) {
-  if (!hashSalvo || !hashSalvo.includes(':')) return false;
-  const [salt, originalHash] = hashSalvo.split(':');
-  const hashDigitado = crypto.pbkdf2Sync(senhaDigitada, salt, 1000, 64, 'sha512').toString('hex');
-  return hashDigitado === originalHash;
+  if (!hashSalvo) return false;
+  if (hashSalvo.startsWith('$2')) {
+    return bcrypt.compareSync(senhaDigitada, hashSalvo);
+  }
+  if (hashSalvo.includes(':')) {
+    const [salt, originalHash] = hashSalvo.split(':');
+    const hashDigitado = crypto.pbkdf2Sync(senhaDigitada, salt, 1000, 64, 'sha512').toString('hex');
+    return hashDigitado === originalHash;
+  }
+  return false;
 }
 
 // Mapeia o tipo para a tabela física ('receitas' ou 'despesas')
@@ -1270,9 +1278,24 @@ const createWindow = () => {
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
+
+  // Permite abrir/fechar o DevTools com F12 ou Ctrl+Shift+I mesmo sem a barra de menu nativa
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') {
+      if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        } else {
+          mainWindow.webContents.openDevTools();
+        }
+        event.preventDefault();
+      }
+    }
+  });
 };
 
 app.whenReady().then(async () => {
