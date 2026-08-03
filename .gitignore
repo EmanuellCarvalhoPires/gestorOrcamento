@@ -30,7 +30,7 @@ out/
 *.pem
 *.p12
 *.pfx
-
+*.key
 # Credenciais OAuth / Secrets do Google
 client_secret*.json
 *credentials*.json

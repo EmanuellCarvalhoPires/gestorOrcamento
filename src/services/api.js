@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core';
 import { secureStorage } from './secureStorage.js';
 
 // URL base da API Backend rodando 24/7 na nuvem da Oracle Cloud (147.15.21.81:3000)
