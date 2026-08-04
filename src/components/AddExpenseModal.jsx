@@ -585,37 +585,37 @@ export default function AddExpenseModal() {
                 <span>🎯</span> Pontual
               </button>
 
-              {tipo === 'receita' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEhFixa(true);
-                    setIsParcelado(false);
-                  }}
-                  style={{
-                    flex: 1,
-                    minWidth: '120px',
-                    height: '42px',
-                    borderRadius: '12px',
-                    border: ehFixa ? '1px solid #ffe192' : '1px solid #737373',
-                    backgroundColor: ehFixa ? 'rgba(255, 225, 146, 0.15)' : '#3e3e3e',
-                    color: ehFixa ? '#ffe192' : '#cccccc',
-                    fontSize: '13px',
-                    fontWeight: ehFixa ? 'bold' : 'normal',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    transition: 'all 0.2s ease',
-                    boxShadow: ehFixa ? '0 2px 8px rgba(255, 225, 146, 0.15)' : 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span>🔄</span> Recorrente / Fixo
-                </button>
-              )}
+              {/* Botão Recorrente / Assinatura */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEhFixa(true);
+                  setIsParcelado(false);
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: '110px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  border: ehFixa ? '1px solid #ffe192' : '1px solid #737373',
+                  backgroundColor: ehFixa ? 'rgba(255, 225, 146, 0.15)' : '#3e3e3e',
+                  color: ehFixa ? '#ffe192' : '#cccccc',
+                  fontSize: '13px',
+                  fontWeight: ehFixa ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: ehFixa ? '0 2px 8px rgba(255, 225, 146, 0.15)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span>🔄</span> Recorrente
+              </button>
 
+              {/* Botão Compra Parcelada (Apenas para Despesas) */}
               {tipo === 'despesa' && (
                 <button
                   type="button"
@@ -625,7 +625,7 @@ export default function AddExpenseModal() {
                   }}
                   style={{
                     flex: 1,
-                    minWidth: '120px',
+                    minWidth: '110px',
                     height: '42px',
                     borderRadius: '12px',
                     border: isParcelado ? '1px solid #ffe192' : '1px solid #737373',
@@ -649,11 +649,11 @@ export default function AddExpenseModal() {
             </div>
           </div>
 
-          {/* Se for Recorrente / Fixo (Receita) */}
-          {ehFixa && tipo === 'receita' && (
+          {/* Se for Recorrente / Fixo (Receita ou Despesa) */}
+          {ehFixa && (
             <div style={{ flex: 1, position: 'relative' }} ref={mesFimRef}>
               <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
-                🔁 Registrar esta receita recorrente até o mês de:
+                🔁 Registrar esta {tipo === 'despesa' ? 'despesa/assinatura' : 'receita'} recorrente até o mês de:
               </label>
 
               <div

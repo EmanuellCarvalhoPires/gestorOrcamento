@@ -208,33 +208,6 @@ export default function UserProfileHeader() {
             })}
           </div>
 
-          {/* Botão para Criar Nova Conta */}
-          <button
-            onClick={() => {
-              setIsDropdownOpen(false);
-              setIsAccountModalOpen(true);
-            }}
-            style={{
-              padding: '10px 16px',
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#ffe192',
-              textAlign: 'left',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginTop: '4px',
-              borderTop: '1px solid #666666',
-            }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
-          >
-            ➕ Criar Nova Conta
-          </button>
-
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
 
           {/* Configurações */}
@@ -258,7 +231,7 @@ export default function UserProfileHeader() {
             onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
             onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            ⚙️ Configurações
+            <span>⚙️</span> Configurações
           </button>
 
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
@@ -285,24 +258,28 @@ export default function UserProfileHeader() {
             onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
             onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            🚪 Sair da Conta
+            <span>🚪</span> Sair da Conta
           </button>
         </div>
       )}
 
-      {/* Modal para Criar Nova Conta */}
+      {/* Modal de Gerenciamento / Criação de Contas */}
       <AccountManagerModal
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
         onCreateAccount={criarNovaConta}
       />
 
-      {/* Modal de Configurações */}
+      {/* Modal de Configurações Gerais */}
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         onExportCSV={handleExportCSV}
         onExportPDF={handleExportPDF}
+        onOpenCreateAccount={() => {
+          setIsSettingsModalOpen(false);
+          setIsAccountModalOpen(true);
+        }}
       />
     </div>
   );

@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
-const OPCOES_HORIZONTE = [
+const OPCOES_ATUAL = [
+  { value: '6_meses', label: 'Últimos 6 Meses', meses: 6 },
+  { value: '1_ano', label: 'Último 1 Ano', meses: 12 },
+  { value: '2_anos', label: 'Últimos 2 Anos', meses: 24 },
+  { value: '3_anos', label: 'Últimos 3 Anos', meses: 36 },
+  { value: '4_anos', label: 'Últimos 4 Anos', meses: 48 },
+  { value: '5_anos', label: 'Últimos 5 Anos', meses: 60 },
+  { value: 'completa', label: 'Histórico Completo', meses: 999 },
+];
+
+const OPCOES_PROJETADA = [
   { value: '6_meses', label: 'Próximos 6 Meses', meses: 6 },
   { value: '1_ano', label: 'Próximo 1 Ano', meses: 12 },
   { value: '2_anos', label: 'Próximos 2 Anos', meses: 24 },
@@ -73,19 +83,19 @@ export default function CaixinhaChart() {
   }, [usuarioLogado?.id, contaAtiva?.id, saldoInicialCaixinha]);
 
   const isAtual = modoCaixinhaVisao === 'atual';
+  const opcoesAtivas = isAtual ? OPCOES_ATUAL : OPCOES_PROJETADA;
+  const opcaoAtual = opcoesAtivas.find((o) => o.value === horizontePrevisao) || opcoesAtivas[6];
+
   const faturasFechadas = historico.filter((h) => h.isFechada);
   const faturasFuturas = historico.filter((h) => !h.isFechada);
 
-  // Determina a quantidade de meses limite baseada no horizonte global selecionado
-  const opcaoAtual = OPCOES_HORIZONTE.find((o) => o.value === horizontePrevisao) || OPCOES_HORIZONTE[6];
-
   const dadosGrafico = isAtual
-    ? faturasFechadas.slice(-8)
-    : faturasFuturas.slice(0, opcaoAtual.meses);
+    ? (opcaoAtual.value === 'completa' ? faturasFechadas : faturasFechadas.slice(-opcaoAtual.meses))
+    : (opcaoAtual.value === 'completa' ? faturasFuturas : faturasFuturas.slice(0, opcaoAtual.meses));
 
   const titulo = isAtual ? '📈 Progresso da Caixinha' : '📊 Previsão de Economia Futura';
   const subtitulo = isAtual
-    ? 'Evolução do saldo nos últimos 8 meses fechados'
+    ? `Histórico filtrado: ${opcaoAtual.label}`
     : `Previsão filtrada: ${opcaoAtual.label}`;
 
   // Se não houver dados para o gráfico
@@ -134,7 +144,7 @@ export default function CaixinhaChart() {
           </div>
           <div style={{ color: '#dddddd', fontSize: '11px', marginTop: '4px' }}>
             {isAtual
-              ? 'Ainda não há histórico de meses encerrados suficientes.'
+              ? 'Ainda não há histórico de meses encerrados no período selecionado.'
               : 'Nenhum lançamento registrado no horizonte selecionado.'}
           </div>
         </div>
@@ -171,7 +181,7 @@ export default function CaixinhaChart() {
         </span>
       </div>
 
-      {/* Gráfico de Barras Com Rolar Horizontal quando houver mais de 8 meses */}
+      {/* Gráfico de Barras Com Rolagem Horizontal quando houver mais de 8 meses */}
       <div
         style={{
           width: '100%',

@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
-const OPCOES_HORIZONTE = [
+const OPCOES_ATUAL = [
+  { value: '6_meses', label: 'Últimos 6 Meses', meses: 6 },
+  { value: '1_ano', label: 'Último 1 Ano', meses: 12 },
+  { value: '2_anos', label: 'Últimos 2 Anos', meses: 24 },
+  { value: '3_anos', label: 'Últimos 3 Anos', meses: 36 },
+  { value: '4_anos', label: 'Últimos 4 Anos', meses: 48 },
+  { value: '5_anos', label: 'Últimos 5 Anos', meses: 60 },
+  { value: 'completa', label: 'Histórico Completo', meses: 999 },
+];
+
+const OPCOES_PROJETADA = [
   { value: '6_meses', label: 'Próximos 6 Meses', meses: 6 },
   { value: '1_ano', label: 'Próximo 1 Ano', meses: 12 },
   { value: '2_anos', label: 'Próximos 2 Anos', meses: 24 },
@@ -58,21 +68,30 @@ export default function CaixinhaDashboard() {
     carregarHistorico();
   }, [usuarioLogado?.id, contaAtiva?.id, saldoInicialCaixinha]);
 
-  // Filtro de horizonte de tempo para Projeção Futura
-  const opcaoHorizonte = OPCOES_HORIZONTE.find((o) => o.value === horizontePrevisao) || OPCOES_HORIZONTE[6];
+  // Lista de opções conforme o modo de visão (Atual vs Projetada)
+  const opcoesAtivas = modoCaixinhaVisao === 'atual' ? OPCOES_ATUAL : OPCOES_PROJETADA;
+  const opcaoHorizonte = opcoesAtivas.find((o) => o.value === horizontePrevisao) || opcoesAtivas[6];
 
   let acumulado = Number(saldoInicialCaixinha || 0);
-  let contadorFuturas = 0;
 
-  const historicoFiltrado = historicoBruto.filter((item) => {
-    if (modoCaixinhaVisao === 'atual') {
-      return true; // Na visão Saldo Atual, mantém todo o histórico
-    }
-    // Na visão Projeção Futura: mantém todas as fechadas + futuras até o limite do horizonte
-    if (item.isFechada) return true;
-    contadorFuturas += 1;
-    return contadorFuturas <= opcaoHorizonte.meses;
-  });
+  // Filtragem dos itens do histórico
+  let historicoFiltrado = [];
+
+  if (modoCaixinhaVisao === 'atual') {
+    // Apenas faturas fechadas, limitando aos N últimos meses selecionados
+    const fechadas = historicoBruto.filter((h) => h.isFechada);
+    historicoFiltrado = opcaoHorizonte.value === 'completa'
+      ? fechadas
+      : fechadas.slice(-opcaoHorizonte.meses);
+  } else {
+    // Projeção futura: faturas fechadas + futuras limitadas aos N próximos meses
+    let contadorFuturas = 0;
+    historicoFiltrado = historicoBruto.filter((item) => {
+      if (item.isFechada) return true;
+      contadorFuturas += 1;
+      return contadorFuturas <= opcaoHorizonte.meses;
+    });
+  }
 
   const historicoProcessado = historicoFiltrado.map((item) => {
     const rec = Number(item.receitas || 0);
@@ -113,32 +132,32 @@ export default function CaixinhaDashboard() {
         width: '100%',
       }}
     >
-      {/* Cabeçalho com Seletor de Modo de Visão e Dropdown de Horizonte */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '24px' }}>📦</span>
-          <div>
-            <h3 style={{ margin: 0, color: '#ffe192', fontSize: '18px', fontWeight: 'bold' }}>
+      {/* Cabeçalho com Seletor de Modo de Visão e Dropdown de Horizonte em Ambos os Modos */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <span style={{ fontSize: '24px', flexShrink: 0 }}>📦</span>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: 0, color: '#ffe192', fontSize: '17px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               Caixinha Acumulada
             </h3>
-            <span style={{ color: '#dddddd', fontSize: '12px' }}>
+            <span style={{ color: '#dddddd', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
               {modoCaixinhaVisao === 'atual'
-                ? 'Exibindo apenas faturas fechadas (anteriores ao mês atual).'
-                : `Exibindo a projeção futura (${opcaoHorizonte.label}).`}
+                ? `Exibindo faturas fechadas (${opcaoHorizonte.label}).`
+                : `Projeção futura (${opcaoHorizonte.label}).`}
             </span>
           </div>
         </div>
 
         {/* Grupo de Ações do Topo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {/* Seletor de Modos de Visão (Saldo Atual vs Projeção Futura) */}
           <div
             style={{
               display: 'flex',
               gap: '4px',
               backgroundColor: '#3e3e3e',
-              padding: '4px',
-              borderRadius: '14px',
+              padding: '3px',
+              borderRadius: '12px',
               border: '1px solid #666666',
             }}
           >
@@ -146,67 +165,66 @@ export default function CaixinhaDashboard() {
               type="button"
               onClick={() => setModoCaixinhaVisao('atual')}
               style={{
-                padding: '8px 16px',
-                borderRadius: '10px',
+                padding: '6px 12px',
+                borderRadius: '9px',
                 border: 'none',
                 backgroundColor: modoCaixinhaVisao === 'atual' ? '#ffe192' : 'transparent',
                 color: modoCaixinhaVisao === 'atual' ? '#333333' : '#dddddd',
                 fontWeight: 'bold',
-                fontSize: '13px',
+                fontSize: '12px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
                 boxShadow: modoCaixinhaVisao === 'atual' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
-              🔒 Saldo Atual (Faturas Fechadas)
+              🔒 Saldo Atual
             </button>
             <button
               type="button"
               onClick={() => setModoCaixinhaVisao('projetada')}
               style={{
-                padding: '8px 16px',
-                borderRadius: '10px',
+                padding: '6px 12px',
+                borderRadius: '9px',
                 border: 'none',
                 backgroundColor: modoCaixinhaVisao === 'projetada' ? '#ffe192' : 'transparent',
                 color: modoCaixinhaVisao === 'projetada' ? '#333333' : '#dddddd',
                 fontWeight: 'bold',
-                fontSize: '13px',
+                fontSize: '12px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
                 boxShadow: modoCaixinhaVisao === 'projetada' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
-              📊 Projeção Futura (Com Lançamentos)
+              📊 Projeção Futura
             </button>
           </div>
 
-          {/* Dropdown de Horizonte (Posicionado ao lado na imagem) */}
-          {modoCaixinhaVisao === 'projetada' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <select
-                value={horizontePrevisao}
-                onChange={(e) => setHorizontePrevisao(e.target.value)}
-                style={{
-                  backgroundColor: '#3e3e3e',
-                  color: '#ffe192',
-                  border: '1px solid #ffe192',
-                  borderRadius: '12px',
-                  padding: '8px 14px',
-                  fontSize: '13px',
-                  fontWeight: 'bold',
-                  outline: 'none',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                }}
-              >
-                {OPCOES_HORIZONTE.map((opt) => (
-                  <option key={opt.value} value={opt.value} style={{ backgroundColor: '#2e2e2e', color: '#ffffff' }}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Dropdown de Horizonte Presente em Ambos os Modos */}
+          <select
+            value={horizontePrevisao}
+            onChange={(e) => setHorizontePrevisao(e.target.value)}
+            style={{
+              backgroundColor: '#3e3e3e',
+              color: '#ffe192',
+              border: '1px solid #ffe192',
+              borderRadius: '10px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              outline: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {opcoesAtivas.map((opt) => (
+              <option key={opt.value} value={opt.value} style={{ backgroundColor: '#2e2e2e', color: '#ffffff' }}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -231,7 +249,7 @@ export default function CaixinhaDashboard() {
           </span>
           <span style={{ fontSize: '12px', color: '#aaaaaa', marginTop: '2px', display: 'block' }}>
             {modoCaixinhaVisao === 'atual'
-              ? 'Valor total consolidado das economias das faturas já encerradas'
+              ? `Valor consolidado das economias das faturas encerradas (${opcaoHorizonte.label})`
               : `Valor projetado considerando a extensão (${opcaoHorizonte.label})`}
           </span>
         </div>
@@ -251,7 +269,7 @@ export default function CaixinhaDashboard() {
       {/* Histórico Cronológico por Mês/Ano */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <h4 style={{ margin: 0, color: '#ffffff', fontSize: '15px', fontWeight: 'bold' }}>
-          📊 Evolução da Caixinha ({modoCaixinhaVisao === 'atual' ? 'Faturas Fechadas' : `Projeção: ${opcaoHorizonte.label}`})
+          📊 Evolução da Caixinha ({modoCaixinhaVisao === 'atual' ? `Faturas Fechadas: ${opcaoHorizonte.label}` : `Projeção: ${opcaoHorizonte.label}`})
         </h4>
 
         <div style={{ overflowY: 'auto', maxHeight: '340px', borderRadius: '12px', border: '1px solid #666666' }}>
