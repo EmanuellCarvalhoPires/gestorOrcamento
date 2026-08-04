@@ -49,3 +49,41 @@ input, textarea, select, [contenteditable="true"] {
 ::-webkit-scrollbar-thumb:hover {
   background: #a6a6a6;
 }
+
+/* Color Scheme Dark & Custom Datepicker Picker Styling */
+:root {
+  color-scheme: dark;
+  accent-color: #ffe192;
+}
+
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: dark;
+  accent-color: #ffe192;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+::-webkit-datetime-edit {
+  color: #ffffff;
+}
+
+::-webkit-datetime-edit-text {
+  color: #ffe192;
+  padding: 0 0.2em;
+}
+
+::-webkit-datetime-edit-month-field:focus,
+::-webkit-datetime-edit-day-field:focus,
+::-webkit-datetime-edit-year-field:focus,
+::-webkit-datetime-edit-hour-field:focus,
+::-webkit-datetime-edit-minute-field:focus {
+  background-color: rgba(255, 225, 146, 0.2);
+  color: #ffe192;
+  outline: none;
+  border-radius: 4px;
+}

@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld('apiTurso', {
   deletarTransacao: (dados) => ipcRenderer.invoke('deletar-transacao', dados),
   exportarCSV: (dados) => ipcRenderer.invoke('exportar-csv', dados),
   exportarPDF: (dados) => ipcRenderer.invoke('exportar-pdf', dados),
+  obterTotalCaixinha: (dados) => ipcRenderer.invoke('obter-total-caixinha', dados),
+  obterHistoricoCaixinha: (dados) => ipcRenderer.invoke('obter-historico-caixinha', dados),
 });

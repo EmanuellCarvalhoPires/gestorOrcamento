@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import YearSelector from './components/YearSelector';
 import MonthSelector from './components/MonthSelector';
 import TransactionTable from './components/TransactionTable';
+import CaixinhaDashboard from './components/CaixinhaDashboard';
+import CaixinhaChart from './components/CaixinhaChart';
 import DonutChart from './components/DonutChart';
 import SummaryCards from './components/SummaryCards';
 import AddExpenseModal from './components/AddExpenseModal';
@@ -77,7 +79,7 @@ class ErrorBoundary extends Component {
 }
 
 const MainLayout = () => {
-  const { usuarioLogado } = useBudget();
+  const { usuarioLogado, anoSelecionado } = useBudget();
 
   // Se não houver usuário logado, exibe a tela de Login / Registro
   if (!usuarioLogado) {
@@ -146,10 +148,10 @@ const MainLayout = () => {
           flexWrap: 'wrap',
         }}
       >
-        {/* Coluna da Esquerda: Tabela de Lançamentos */}
-        <TransactionTable />
+        {/* Coluna da Esquerda: Tabela de Lançamentos ou Dashboard da Caixinha */}
+        {anoSelecionado === 'caixinha' ? <CaixinhaDashboard /> : <TransactionTable />}
 
-        {/* Coluna da Direita: Gráfico de Rosca + Cards de Resumo */}
+        {/* Coluna da Direita: Gráfico e Cards */}
         <div
           style={{
             width: '320px',
@@ -159,8 +161,14 @@ const MainLayout = () => {
             alignItems: 'center',
           }}
         >
-          <DonutChart />
-          <SummaryCards />
+          {anoSelecionado === 'caixinha' ? (
+            <CaixinhaChart />
+          ) : (
+            <>
+              <DonutChart />
+              <SummaryCards />
+            </>
+          )}
         </div>
       </div>
 

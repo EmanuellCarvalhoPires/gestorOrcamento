@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 const MESES_LISTA = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -12,7 +12,9 @@ export default function AddExpenseModal() {
     etiquetaList,
     isComercial,
     setIsCategoryModalOpen,
+    mesSelecionado,
     setMesSelecionado,
+    anoSelecionado,
     setAnoSelecionado,
     abaAtiva,
     setAbaAtiva,
@@ -31,7 +33,7 @@ export default function AddExpenseModal() {
   const [valorNumerico, setValorNumerico] = useState(0);
   
   const [classificacao, setClassificacao] = useState('');
-  const [etiqueta, setEtiqueta] = useState('Geral');
+  const [etiqueta, setEtiqueta] = useState('');
   const [dataTransacao, setDataTransacao] = useState(getNowFormatted());
   
   const [isParcelado, setIsParcelado] = useState(false);
@@ -39,7 +41,35 @@ export default function AddExpenseModal() {
   const [totalParcelas, setTotalParcelas] = useState(1);
   
   const [ehFixa, setEhFixa] = useState(false);
+  const [mesFimRecorrencia, setMesFimRecorrencia] = useState('Dez');
   const [descricao, setDescricao] = useState('');
+
+  // Dropdowns personalizados
+  const catRef = useRef(null);
+  const etiqRef = useRef(null);
+  const mesFimRef = useRef(null);
+  const [isCatOpen, setIsCatOpen] = useState(false);
+  const [isEtiqOpen, setIsEtiqOpen] = useState(false);
+  const [isMesFimOpen, setIsMesFimOpen] = useState(false);
+  const [hoveredCat, setHoveredCat] = useState(null);
+  const [hoveredEtiq, setHoveredEtiq] = useState(null);
+  const [hoveredMesFim, setHoveredMesFim] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target)) {
+        setIsCatOpen(false);
+      }
+      if (etiqRef.current && !etiqRef.current.contains(e.target)) {
+        setIsEtiqOpen(false);
+      }
+      if (mesFimRef.current && !mesFimRef.current.contains(e.target)) {
+        setIsMesFimOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Sincroniza o tipo do modal (Receita x Despesa) com a aba ativa da tabela ao abrir o modal
   useEffect(() => {
@@ -75,10 +105,27 @@ export default function AddExpenseModal() {
 
     const catFinal = classificacao || (categorias[0]?.nome || 'Outros');
 
-    // Deriva o Mês e Ano diretamente da Data Selecionada
-    const dtObj = dataTransacao ? new Date(dataTransacao) : new Date();
-    const mesCalculado = MESES_LISTA[dtObj.getMonth()];
-    const anoCalculado = dtObj.getFullYear().toString();
+    let mesCalculado = mesSelecionado;
+    let anoCalculado = anoSelecionado;
+    let finalDataTransacao = dataTransacao;
+
+    if (mesSelecionado !== 'Todos') {
+      const mesIndex = MESES_LISTA.indexOf(mesSelecionado);
+      const anoNum = parseInt(anoSelecionado, 10) || new Date().getFullYear();
+      
+      const agora = new Date();
+      if (agora.getMonth() === mesIndex && agora.getFullYear() === anoNum) {
+        finalDataTransacao = getNowFormatted(); // Usa data atual se estiver adicionando no mês atual
+      } else {
+        const fakeDate = new Date(anoNum, mesIndex, 1, 12, 0, 0); // Primeiro dia do mês ao meio-dia
+        const pad = (n) => (n < 10 ? `0${n}` : n);
+        finalDataTransacao = `${fakeDate.getFullYear()}-${pad(fakeDate.getMonth() + 1)}-${pad(fakeDate.getDate())}T${pad(fakeDate.getHours())}:${pad(fakeDate.getMinutes())}`;
+      }
+    } else {
+      const dtObj = dataTransacao ? new Date(dataTransacao) : new Date();
+      mesCalculado = MESES_LISTA[dtObj.getMonth()];
+      anoCalculado = dtObj.getFullYear().toString();
+    }
 
     await adicionarTransacao({
       tipo,
@@ -86,10 +133,11 @@ export default function AddExpenseModal() {
       valor: valorNumerico,
       classificacao: catFinal,
       etiqueta: etiqueta.trim() || 'Geral',
-      dataTransacao,
-      parcelaAtual: isParcelado ? parcelaAtual : 1,
-      totalParcelas: isParcelado ? totalParcelas : 1,
+      dataTransacao: finalDataTransacao,
+      parcelaAtual: isParcelado ? (parseInt(parcelaAtual, 10) || 1) : 1,
+      totalParcelas: isParcelado ? (parseInt(totalParcelas, 10) || 1) : 1,
       ehFixa,
+      mesFimRecorrencia,
       descricao,
       mesPersonalizado: mesCalculado,
       ano: anoCalculado,
@@ -104,12 +152,13 @@ export default function AddExpenseModal() {
     setValorFormatado('R$ 0,00');
     setValorNumerico(0);
     setClassificacao('');
-    setEtiqueta('Geral');
+    setEtiqueta('');
     setDataTransacao(getNowFormatted());
     setIsParcelado(false);
     setParcelaAtual(1);
     setTotalParcelas(1);
     setEhFixa(false);
+    setMesFimRecorrencia('Dez');
     setDescricao('');
     setIsModalOpen(false);
   };
@@ -142,15 +191,15 @@ export default function AddExpenseModal() {
         style={{
           backgroundColor: '#545454',
           borderRadius: '24px',
-          padding: '32px',
+          padding: '28px 32px',
           width: '90%',
-          maxWidth: '520px',
+          maxWidth: '585px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '18px',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-          maxHeight: '90vh',
-          overflowY: 'auto',
+          gap: '21px',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+          position: 'relative',
+          overflow: 'visible',
         }}
       >
         {/* Topo do Modal com Seleção de Tipo - MESMA ORDEM DA TABELA: Receita à Esquerda, Despesa à Direita */}
@@ -196,7 +245,7 @@ export default function AddExpenseModal() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '19px' }}>
           {/* Nome do Lançamento */}
           <div>
             <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
@@ -223,7 +272,7 @@ export default function AddExpenseModal() {
           </div>
 
           {/* Valor com Máscara ATM Real-Time + Data e Hora da Transação */}
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '17px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
                 Valor Total (R$)
@@ -249,34 +298,43 @@ export default function AddExpenseModal() {
             </div>
 
             {/* CAMPO DE DATA E HORA */}
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
-                📅 Data e Hora
-              </label>
-              <input
-                type="datetime-local"
-                value={dataTransacao}
-                onChange={(e) => setDataTransacao(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 12px',
-                  borderRadius: '14px',
-                  border: '1px solid #737373',
-                  backgroundColor: '#3e3e3e',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-                required
-              />
-            </div>
+            {mesSelecionado === 'Todos' && (
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+                  📅 Data e Hora
+                </label>
+                <input
+                  type="datetime-local"
+                  value={dataTransacao}
+                  onChange={(e) => setDataTransacao(e.target.value)}
+                  onClick={(e) => {
+                    try {
+                      e.target.showPicker();
+                    } catch (err) {}
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 12px',
+                    borderRadius: '14px',
+                    border: '1px solid #737373',
+                    backgroundColor: '#3e3e3e',
+                    color: '#ffffff',
+                    colorScheme: 'dark',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    cursor: 'pointer',
+                  }}
+                  required
+                />
+              </div>
+            )}
           </div>
 
           {/* Classificação / Categoria e Etiqueta Reutilizável */}
-          <div style={{ display: 'flex', gap: '12px' }}>
-            {/* Categoria */}
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '17px' }}>
+            {/* CATEGORIA CUSTOM DROPDOWN */}
+            <div style={{ flex: 1, position: 'relative' }} ref={catRef}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ color: '#dddddd', fontSize: '13px' }}>Categoria</label>
                 <button
@@ -294,91 +352,391 @@ export default function AddExpenseModal() {
                   + Categorias
                 </button>
               </div>
-              <select
-                value={classificacao}
-                onChange={(e) => setClassificacao(e.target.value)}
+
+              <div
+                onClick={() => setIsCatOpen(!isCatOpen)}
                 style={{
                   width: '100%',
                   padding: '12px 14px',
                   borderRadius: '14px',
-                  border: '1px solid #737373',
+                  border: isCatOpen ? '1px solid #ffe192' : '1px solid #737373',
                   backgroundColor: '#3e3e3e',
-                  color: '#ffffff',
+                  color: classificacao ? '#ffffff' : '#aaaaaa',
                   fontSize: '13px',
-                  outline: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   boxSizing: 'border-box',
+                  userSelect: 'none',
+                  transition: 'border 0.2s',
                 }}
               >
-                <option value="">Selecione uma Categoria...</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id || cat.nome} value={cat.nome}>
-                    {cat.nome}
-                  </option>
-                ))}
-              </select>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {classificacao || 'Selecione uma Categoria...'}
+                </span>
+                <span style={{ fontSize: '10px', color: '#ffe192', marginLeft: '6px' }}>
+                  {isCatOpen ? '▲' : '▼'}
+                </span>
+              </div>
+
+              {isCatOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 200,
+                    backgroundColor: '#2e2e2e',
+                    border: '1px solid #ffe192',
+                    borderRadius: '14px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    padding: '6px 0',
+                  }}
+                >
+                  {categorias.map((cat) => {
+                    const isHovered = hoveredCat === cat.nome;
+                    const isSelected = classificacao === cat.nome;
+                    return (
+                      <div
+                        key={cat.id || cat.nome}
+                        onMouseEnter={() => setHoveredCat(cat.nome)}
+                        onMouseLeave={() => setHoveredCat(null)}
+                        onClick={() => {
+                          setClassificacao(cat.nome);
+                          setIsCatOpen(false);
+                        }}
+                        style={{
+                          padding: '7px 12px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          color: isHovered || isSelected ? '#ffe192' : '#ffffff',
+                          backgroundColor: isHovered || isSelected ? 'rgba(255, 225, 146, 0.15)' : 'transparent',
+                          fontWeight: isSelected ? 'bold' : 'normal',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>{cat.nome}</span>
+                        {isSelected && <span style={{ color: '#ffe192', fontSize: '12px' }}>✓</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* ETIQUETA REUTILIZÁVEL (COM AUTO-COMPLETE DATALIST) */}
-            <div style={{ flex: 1 }}>
+            {/* ETIQUETA CUSTOM COMBOBOX */}
+            <div style={{ flex: 1, position: 'relative' }} ref={etiqRef}>
               <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
                 📌 Etiqueta / Tag
               </label>
-              <input
-                type="text"
-                list="lista-etiquetas-add"
-                value={etiqueta}
-                onChange={(e) => setEtiqueta(e.target.value)}
-                placeholder="Ex: Geral, Nubank..."
+
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input
+                  type="text"
+                  value={etiqueta}
+                  onFocus={() => {
+                    setEtiqueta('');
+                    setIsEtiqOpen(true);
+                  }}
+                  onChange={(e) => {
+                    setEtiqueta(e.target.value);
+                    setIsEtiqOpen(true);
+                  }}
+                  placeholder="Ex: Geral, Nubank..."
+                  style={{
+                    width: '100%',
+                    padding: '12px 32px 12px 14px',
+                    borderRadius: '14px',
+                    border: isEtiqOpen ? '1px solid #ffe192' : '1px solid #737373',
+                    backgroundColor: '#3e3e3e',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    transition: 'border 0.2s',
+                  }}
+                />
+                <span
+                  onClick={() => setIsEtiqOpen(!isEtiqOpen)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '10px',
+                    color: '#ffe192',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isEtiqOpen ? '▲' : '▼'}
+                </span>
+              </div>
+
+              {isEtiqOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 200,
+                    backgroundColor: '#2e2e2e',
+                    border: '1px solid #ffe192',
+                    borderRadius: '14px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    padding: '6px 0',
+                  }}
+                >
+                  {etiquetaList
+                    .filter((etiq) => etiq.toLowerCase().includes((etiqueta || '').toLowerCase()))
+                    .map((etiq) => {
+                      const isHovered = hoveredEtiq === etiq;
+                      const isSelected = etiqueta === etiq;
+                      return (
+                        <div
+                          key={etiq}
+                          onMouseEnter={() => setHoveredEtiq(etiq)}
+                          onMouseLeave={() => setHoveredEtiq(null)}
+                          onClick={() => {
+                            setEtiqueta(etiq);
+                            setIsEtiqOpen(false);
+                          }}
+                          style={{
+                            padding: '7px 12px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: isHovered || isSelected ? '#ffe192' : '#ffffff',
+                            backgroundColor: isHovered || isSelected ? 'rgba(255, 225, 146, 0.15)' : 'transparent',
+                            fontWeight: isSelected ? 'bold' : 'normal',
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span>{etiq}</span>
+                          {isSelected && <span style={{ color: '#ffe192', fontSize: '12px' }}>✓</span>}
+                        </div>
+                      );
+                    })}
+
+                  {etiqueta && !etiquetaList.some((e) => e.toLowerCase() === etiqueta.toLowerCase()) && (
+                    <div
+                      onMouseEnter={() => setHoveredEtiq('__NOVA__')}
+                      onMouseLeave={() => setHoveredEtiq(null)}
+                      onClick={() => setIsEtiqOpen(false)}
+                      style={{
+                        padding: '10px 14px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        color: '#ffe192',
+                        backgroundColor: hoveredEtiq === '__NOVA__' ? 'rgba(255, 225, 146, 0.2)' : 'rgba(255, 225, 146, 0.08)',
+                        borderTop: '1px solid #444444',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      + Usar nova etiqueta: "{etiqueta}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Opções de Frequência / Pagamento (Choice Chips) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ color: '#dddddd', fontSize: '13px' }}>Tipo de Lançamento</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEhFixa(false);
+                  setIsParcelado(false);
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: '120px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  border: !ehFixa && !isParcelado ? '1px solid #ffe192' : '1px solid #737373',
+                  backgroundColor: !ehFixa && !isParcelado ? 'rgba(255, 225, 146, 0.15)' : '#3e3e3e',
+                  color: !ehFixa && !isParcelado ? '#ffe192' : '#cccccc',
+                  fontSize: '13px',
+                  fontWeight: !ehFixa && !isParcelado ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: !ehFixa && !isParcelado ? '0 2px 8px rgba(255, 225, 146, 0.15)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span>🎯</span> Pontual
+              </button>
+
+              {tipo === 'receita' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEhFixa(true);
+                    setIsParcelado(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: '120px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    border: ehFixa ? '1px solid #ffe192' : '1px solid #737373',
+                    backgroundColor: ehFixa ? 'rgba(255, 225, 146, 0.15)' : '#3e3e3e',
+                    color: ehFixa ? '#ffe192' : '#cccccc',
+                    fontSize: '13px',
+                    fontWeight: ehFixa ? 'bold' : 'normal',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: ehFixa ? '0 2px 8px rgba(255, 225, 146, 0.15)' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>🔄</span> Recorrente / Fixo
+                </button>
+              )}
+
+              {tipo === 'despesa' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsParcelado(true);
+                    setEhFixa(false);
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: '120px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    border: isParcelado ? '1px solid #ffe192' : '1px solid #737373',
+                    backgroundColor: isParcelado ? 'rgba(255, 225, 146, 0.15)' : '#3e3e3e',
+                    color: isParcelado ? '#ffe192' : '#cccccc',
+                    fontSize: '13px',
+                    fontWeight: isParcelado ? 'bold' : 'normal',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isParcelado ? '0 2px 8px rgba(255, 225, 146, 0.15)' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>💳</span> Compra Parcelada
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Se for Recorrente / Fixo (Receita) */}
+          {ehFixa && tipo === 'receita' && (
+            <div style={{ flex: 1, position: 'relative' }} ref={mesFimRef}>
+              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+                🔁 Registrar esta receita recorrente até o mês de:
+              </label>
+
+              <div
+                onClick={() => setIsMesFimOpen(!isMesFimOpen)}
                 style={{
                   width: '100%',
                   padding: '12px 14px',
                   borderRadius: '14px',
-                  border: '1px solid #737373',
+                  border: isMesFimOpen ? '1px solid #ffe192' : '1px solid #737373',
                   backgroundColor: '#3e3e3e',
-                  color: '#ffffff',
+                  color: '#ffe192',
+                  fontWeight: 'bold',
                   fontSize: '13px',
-                  outline: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   boxSizing: 'border-box',
+                  userSelect: 'none',
+                  transition: 'border 0.2s',
                 }}
-              />
-              <datalist id="lista-etiquetas-add">
-                {etiquetaList.map((etiq) => (
-                  <option key={etiq} value={etiq} />
-                ))}
-              </datalist>
-            </div>
-          </div>
+              >
+                <span>
+                  Até {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][MESES_LISTA.indexOf(mesFimRecorrencia)]} ({mesFimRecorrencia})
+                </span>
+                <span style={{ fontSize: '10px', color: '#ffe192', marginLeft: '6px' }}>
+                  {isMesFimOpen ? '▲' : '▼'}
+                </span>
+              </div>
 
-          {/* Checkbox de Recorrência / Parcelamento */}
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', fontSize: '13px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={ehFixa}
-                onChange={(e) => {
-                  setEhFixa(e.target.checked);
-                  if (e.target.checked) setIsParcelado(false);
-                }}
-                style={{ accentColor: '#ffe192', width: '16px', height: '16px' }}
-              />
-              Recorrente / Fixo todos os meses
-            </label>
-
-            {tipo === 'despesa' && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ffffff', fontSize: '13px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={isParcelado}
-                  onChange={(e) => {
-                    setIsParcelado(e.target.checked);
-                    if (e.target.checked) setEhFixa(false);
+              {isMesFimOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 200,
+                    backgroundColor: '#2e2e2e',
+                    border: '1px solid #ffe192',
+                    borderRadius: '14px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    padding: '4px 0',
                   }}
-                  style={{ accentColor: '#ffe192', width: '16px', height: '16px' }}
-                />
-                Compra Parcelada
-              </label>
-            )}
-          </div>
+                >
+                  {MESES_LISTA.map((m, index) => {
+                    const nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                    const isHovered = hoveredMesFim === m;
+                    const isSelected = mesFimRecorrencia === m;
+                    const labelText = `Até ${nomes[index]} (${m})`;
+                    return (
+                      <div
+                        key={m}
+                        onMouseEnter={() => setHoveredMesFim(m)}
+                        onMouseLeave={() => setHoveredMesFim(null)}
+                        onClick={() => {
+                          setMesFimRecorrencia(m);
+                          setIsMesFimOpen(false);
+                        }}
+                        style={{
+                          padding: '7px 12px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          color: isHovered || isSelected ? '#ffe192' : '#ffffff',
+                          backgroundColor: isHovered || isSelected ? 'rgba(255, 225, 146, 0.15)' : 'transparent',
+                          fontWeight: isSelected ? 'bold' : 'normal',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>{labelText}</span>
+                        {isSelected && <span style={{ color: '#ffe192', fontSize: '12px' }}>✓</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Se for Parcelado */}
           {isParcelado && tipo === 'despesa' && (
@@ -388,10 +746,15 @@ export default function AddExpenseModal() {
                 <input
                   type="number"
                   min="1"
-                  max={totalParcelas}
+                  max={totalParcelas || 48}
                   value={parcelaAtual}
-                  onChange={(e) => setParcelaAtual(parseInt(e.target.value, 10) || 1)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #737373', backgroundColor: '#3e3e3e', color: '#fff' }}
+                  onChange={(e) => setParcelaAtual(e.target.value)}
+                  onBlur={() => {
+                    if (!parcelaAtual || parseInt(parcelaAtual, 10) < 1) {
+                      setParcelaAtual(1);
+                    }
+                  }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #737373', backgroundColor: '#3e3e3e', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -401,12 +764,48 @@ export default function AddExpenseModal() {
                   min="1"
                   max="48"
                   value={totalParcelas}
-                  onChange={(e) => setTotalParcelas(parseInt(e.target.value, 10) || 1)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #737373', backgroundColor: '#3e3e3e', color: '#fff' }}
+                  onChange={(e) => setTotalParcelas(e.target.value)}
+                  onBlur={() => {
+                    if (!totalParcelas || parseInt(totalParcelas, 10) < 1) {
+                      setTotalParcelas(1);
+                    }
+                  }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #737373', backgroundColor: '#3e3e3e', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
             </div>
           )}
+
+          {/* Descrição / Observações (Máx. 200 caracteres) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ color: '#dddddd', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
+              <span style={{ fontSize: '11px', color: (descricao || '').length > 180 ? '#ffe192' : '#aaaaaa' }}>
+                {(descricao || '').length}/200
+              </span>
+            </div>
+            <textarea
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value.slice(0, 200))}
+              maxLength={200}
+              placeholder="Observações adicionais (máx. 200 caracteres)..."
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffffff',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                minHeight: '60px',
+                maxHeight: '120px',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
 
           {/* Botões do Rodapé */}
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>

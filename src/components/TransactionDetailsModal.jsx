@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
-export default function TransactionDetailsModal({ isOpen, item, onClose, onSave, onDelete }) {
+export default function TransactionDetailsModal({ isOpen, item, onClose, onSave, onDelete, isEncerrada }) {
   const { categorias, etiquetaList, isComercial, setIsCategoryModalOpen } = useBudget();
 
   const [modoEdicao, setModoEdicao] = useState(false);
@@ -70,8 +70,20 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
 
   const isReceita = item.tipo === 'receitas' || item.tipo === 'receita';
   const dataExtenso = item.data_transacao ? new Date(item.data_transacao).toLocaleString('pt-BR') : 'Não informada';
-  const catObj = categorias.find((c) => c.nome.toLowerCase() === (item.classificacao || '').toLowerCase());
-  const corCat = catObj?.cor || '#ffe192';
+  const catEncontrada = categorias.find((c) => c.nome.toLowerCase() === (item.classificacao || '').toLowerCase());
+  const corCat = catEncontrada?.cor || '#ffe192';
+
+  const isParcelado = item?.parcelas && item.parcelas.includes('/');
+  let totalParcelasNum = 1;
+  let totalCompraParcelada = null;
+
+  if (isParcelado) {
+    const parts = item.parcelas.split('/');
+    totalParcelasNum = parseInt(parts[1], 10) || 1;
+    if (totalParcelasNum > 1) {
+      totalCompraParcelada = (Number(item.valor) || 0) * totalParcelasNum;
+    }
+  }
 
   return (
     <div
@@ -143,6 +155,27 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
         {!modoEdicao ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
+            {/* Aviso de Conta Encerrada */}
+            {isEncerrada && (
+              <div
+                style={{
+                  backgroundColor: '#5a2d2d',
+                  color: '#ffcccc',
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  border: '1px solid #e76f51',
+                }}
+              >
+                <span>🔒</span>
+                <span>Conta Encerrada: Os registros desta fatura estão bloqueados para edição ou exclusão.</span>
+              </div>
+            )}
+            
             {/* Bloco de Valor em Grande Destaque */}
             <div
               style={{
@@ -154,7 +187,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               }}
             >
               <div style={{ fontSize: '12px', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                Valor Total do Lançamento
+                {totalCompraParcelada ? 'Valor desta Parcela' : 'Valor Total do Lançamento'}
               </div>
               <div
                 style={{
@@ -165,6 +198,29 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               >
                 R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </div>
+
+              {/* Se for compra parcelada, exibe o Valor Total da Compra */}
+              {totalCompraParcelada && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    paddingTop: '10px',
+                    borderTop: '1px dashed #555555',
+                    fontSize: '13px',
+                    color: '#ffe192',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>💳</span>
+                  <span>
+                    Valor Total da Compra: R$ {totalCompraParcelada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({totalParcelasNum}x de R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Grid de Informações Detalhadas */}
@@ -205,6 +261,11 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                 <strong style={{ fontSize: '13px', color: '#ffffff' }}>
                   {item.eh_fixa === 1 ? 'Fixa todos os meses' : (item.parcelas || '1/1')}
                 </strong>
+                {totalCompraParcelada && (
+                  <span style={{ fontSize: '11px', color: '#ffe192', display: 'block', marginTop: '3px', fontWeight: 'bold' }}>
+                    Total: R$ {totalCompraParcelada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
 
               {/* Descrição / Observações */}
@@ -326,6 +387,11 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                   type="datetime-local"
                   value={dataTransacao}
                   onChange={(e) => setDataTransacao(e.target.value)}
+                  onClick={(e) => {
+                    try {
+                      e.target.showPicker();
+                    } catch (err) {}
+                  }}
                   style={{
                     width: '100%',
                     padding: '12px 12px',
@@ -333,9 +399,11 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                     border: '1px solid #737373',
                     backgroundColor: '#3e3e3e',
                     color: '#ffffff',
+                    colorScheme: 'dark',
                     fontSize: '13px',
                     outline: 'none',
                     boxSizing: 'border-box',
+                    cursor: 'pointer',
                   }}
                   required
                 />
@@ -417,15 +485,19 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               </div>
             </div>
 
-            {/* Descrição / Observações */}
+            {/* Descrição / Observações (Máx. 200 caracteres) */}
             <div>
-              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
-                Descrição / Observações (Opcional)
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ color: '#dddddd', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
+                <span style={{ fontSize: '11px', color: (descricao || '').length > 180 ? '#ffe192' : '#aaaaaa' }}>
+                  {(descricao || '').length}/200
+                </span>
+              </div>
               <textarea
                 value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
-                placeholder="Observações adicionais..."
+                onChange={(e) => setDescricao(e.target.value.slice(0, 200))}
+                maxLength={200}
+                placeholder="Observações adicionais (máx. 200 caracteres)..."
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -438,6 +510,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                   boxSizing: 'border-box',
                   minHeight: '60px',
                   resize: 'vertical',
+                  fontFamily: 'inherit',
                 }}
               />
             </div>

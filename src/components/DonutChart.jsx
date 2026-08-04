@@ -2,19 +2,31 @@ import React from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function DonutChart() {
-  const { despesas, totalDespesas, categorias } = useBudget();
+  const { abaAtiva, receitas, totalReceitas, despesas, totalDespesas, categorias, isComercial } = useBudget();
 
-  // Agrupa despesas por categoria
-  const despesasPorCategoria = despesas.reduce((acc, item) => {
+  const isReceita = abaAtiva === 'receitas' || abaAtiva === 'receita';
+  const listaItens = isReceita ? receitas : despesas;
+  const totalItens = isReceita ? totalReceitas : totalDespesas;
+
+  const tituloGrafico = isComercial
+    ? (isReceita ? 'Vendas & Faturamento' : 'Custos & Despesas')
+    : (isReceita ? 'Receitas' : 'Despesas');
+
+  const mensagemVazio = isReceita
+    ? 'Nenhuma receita cadastrada neste mês.'
+    : 'Nenhuma despesa cadastrada neste mês.';
+
+  // Agrupa transações por categoria
+  const itensPorCategoria = (listaItens || []).reduce((acc, item) => {
     const cat = item.classificacao || 'Outros';
     acc[cat] = (acc[cat] || 0) + Number(item.valor);
     return acc;
   }, {});
 
-  const categoriasComDespesa = Object.keys(despesasPorCategoria);
+  const categoriasComValores = Object.keys(itensPorCategoria);
 
-  // Se não houver despesas no mês/ano selecionado, exibe o Estado Vazio bonito
-  if (totalDespesas <= 0 || categoriasComDespesa.length === 0) {
+  // Se não houver itens no mês/ano selecionado, exibe o Estado Vazio
+  if (totalItens <= 0 || categoriasComValores.length === 0) {
     return (
       <div
         style={{
@@ -33,7 +45,7 @@ export default function DonutChart() {
         }}
       >
         <h4 style={{ margin: 0, color: '#ffffff', fontSize: '15px', fontWeight: '500' }}>
-          Despesas
+          {tituloGrafico}
         </h4>
 
         <div
@@ -58,7 +70,7 @@ export default function DonutChart() {
             Gráfico Indisponível
           </div>
           <div style={{ color: '#dddddd', fontSize: '12px', marginTop: '4px' }}>
-            Nenhuma despesa cadastrada neste mês.
+            {mensagemVazio}
           </div>
         </div>
       </div>
@@ -66,15 +78,15 @@ export default function DonutChart() {
   }
 
   // Mapeia cada categoria com sua cor cadastrada no banco de dados
-  const coresFallbacks = ['#fb8500', '#ffd166', '#ffb703', '#ffe192', '#f4a261', '#2a9d8f', '#e76f51'];
+  const coresFallbacks = ['#ffe192', '#fb8500', '#ffd166', '#ffb703', '#f4a261', '#2a9d8f', '#e76f51'];
 
-  const dadosExibicao = categoriasComDespesa.map((catNome, idx) => {
+  const dadosExibicao = categoriasComValores.map((catNome, idx) => {
     const catEncontrada = categorias.find((c) => c.nome.toLowerCase() === catNome.toLowerCase());
     const cor = catEncontrada?.cor || coresFallbacks[idx % coresFallbacks.length];
 
     return {
       nome: catNome,
-      porcentagem: Math.round((despesasPorCategoria[catNome] / totalDespesas) * 100),
+      porcentagem: Math.round((itensPorCategoria[catNome] / totalItens) * 100),
       cor,
     };
   });
@@ -99,7 +111,7 @@ export default function DonutChart() {
       }}
     >
       <h4 style={{ margin: '0 0 12px 0', color: '#ffffff', fontSize: '15px', fontWeight: '500' }}>
-        Despesas
+        {tituloGrafico}
       </h4>
 
       <div style={{ position: 'relative', width: '150px', height: '150px' }}>

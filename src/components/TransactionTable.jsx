@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import iconLixeira from '../../images/lixeira-de-reciclagem.png';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -20,8 +20,22 @@ export default function TransactionTable() {
   } = useBudget();
 
   const [buscaTexto, setBuscaTexto] = useState('');
+  const [ordem, setOrdem] = useState('recente');
+  const [isOrdemOpen, setIsOrdemOpen] = useState(false);
+  const [hoveredOrdem, setHoveredOrdem] = useState(null);
   const [itemParaDeletar, setItemParaDeletar] = useState(null);
   const [itemParaDetalhes, setItemParaDetalhes] = useState(null);
+  const ordemRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ordemRef.current && !ordemRef.current.contains(event.target)) {
+        setIsOrdemOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const totalExibido = abaAtiva === 'receitas' ? totalReceitas : totalDespesas;
 
@@ -39,6 +53,48 @@ export default function TransactionTable() {
     );
   });
 
+  const opcoesOrdem = [
+    { value: 'recente', label: '📅 Mais Recente' },
+    { value: 'antigo', label: '📅 Mais Antigo' },
+    { value: 'valor_desc', label: '💲 Maior Valor' },
+    { value: 'valor_asc', label: '💲 Menor Valor' },
+    { value: 'nome_asc', label: '🔤 Nome (A - Z)' },
+    { value: 'nome_desc', label: '🔤 Nome (Z - A)' },
+    { value: 'etiqueta_asc', label: '🏷️ Etiqueta (A - Z)' },
+    { value: 'etiqueta_desc', label: '🏷️ Etiqueta (Z - A)' },
+  ];
+
+  const itemOrdemAtual = opcoesOrdem.find((o) => o.value === ordem) || opcoesOrdem[0];
+
+  // Aplicação da Ordenação
+  const transacoesOrdenadas = [...transacoesFiltradasPelaBusca].sort((a, b) => {
+    if (ordem === 'recente') {
+      return new Date(b.data_transacao || 0) - new Date(a.data_transacao || 0);
+    }
+    if (ordem === 'antigo') {
+      return new Date(a.data_transacao || 0) - new Date(b.data_transacao || 0);
+    }
+    if (ordem === 'valor_desc') {
+      return Number(b.valor || 0) - Number(a.valor || 0);
+    }
+    if (ordem === 'valor_asc') {
+      return Number(a.valor || 0) - Number(b.valor || 0);
+    }
+    if (ordem === 'nome_asc') {
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
+    }
+    if (ordem === 'nome_desc') {
+      return (b.nome || '').localeCompare(a.nome || '', 'pt-BR', { sensitivity: 'base' });
+    }
+    if (ordem === 'etiqueta_asc') {
+      return (a.etiqueta || '').localeCompare(b.etiqueta || '', 'pt-BR', { sensitivity: 'base' });
+    }
+    if (ordem === 'etiqueta_desc') {
+      return (b.etiqueta || '').localeCompare(a.etiqueta || '', 'pt-BR', { sensitivity: 'base' });
+    }
+    return 0;
+  });
+
   const handleConfirmDelete = async ({ deletarModo, parcelaNum, ehFixa, mes }) => {
     if (itemParaDeletar) {
       await deletarTransacao(itemParaDeletar.id, {
@@ -54,23 +110,27 @@ export default function TransactionTable() {
   };
 
   const handleSaveEdit = async (dadosEdicao) => {
-    const res = await editarTransacao({
+    await editarTransacao({
       ...dadosEdicao,
       tipo: abaAtiva,
     });
-    if (res?.mesCalculado) setMesSelecionado(res.mesCalculado);
-    if (res?.anoCalculado) setAnoSelecionado(res.anoCalculado);
     setItemParaDetalhes(null);
   };
 
-  const formatDataHora = (isoStr) => {
+  const MESES_MAP = {
+    Jan: '01', Fev: '02', Mar: '03', Abr: '04',
+    Mai: '05', Jun: '06', Jul: '07', Ago: '08',
+    Set: '09', Out: '10', Nov: '11', Dez: '12'
+  };
+
+  const formatDataHora = (isoStr, itemMes) => {
     if (!isoStr) return '--/--';
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return '--/--';
     const pad = (n) => (n < 10 ? `0${n}` : n);
-    const diaMes = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-    const hora = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    return `${diaMes} ${hora}`;
+    const dia = pad(d.getDate());
+    const mesNum = (itemMes && MESES_MAP[itemMes]) ? MESES_MAP[itemMes] : pad(d.getMonth() + 1);
+    return `${dia}/${mesNum}`;
   };
 
   // Nomenclaturas adaptativas por perfil
@@ -138,9 +198,9 @@ export default function TransactionTable() {
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input
               type="text"
+              placeholder="🔍 Buscar..."
               value={buscaTexto}
               onChange={(e) => setBuscaTexto(e.target.value)}
-              placeholder="🔍 Buscar por nome, data..."
               style={{
                 padding: '8px 30px 8px 14px',
                 borderRadius: '20px',
@@ -149,7 +209,7 @@ export default function TransactionTable() {
                 color: '#ffffff',
                 fontSize: '13px',
                 outline: 'none',
-                width: '180px',
+                width: '150px',
               }}
             />
             {buscaTexto && (
@@ -168,6 +228,85 @@ export default function TransactionTable() {
               >
                 ✕
               </button>
+            )}
+          </div>
+
+          {/* Dropdown Customizado de Ordenação */}
+          <div style={{ position: 'relative' }} ref={ordemRef}>
+            <button
+              onClick={() => setIsOrdemOpen(!isOrdemOpen)}
+              title="Ordenar lançamentos"
+              style={{
+                padding: '8px 14px',
+                borderRadius: '20px',
+                border: isOrdemOpen ? '1px solid #ffe192' : '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffe192',
+                fontWeight: 'bold',
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '35px',
+                userSelect: 'none',
+                transition: 'border 0.2s',
+              }}
+            >
+              <span>{itemOrdemAtual.label}</span>
+              <span style={{ fontSize: '10px', color: '#ffe192' }}>{isOrdemOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {isOrdemOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  zIndex: 200,
+                  backgroundColor: '#2e2e2e',
+                  border: '1px solid #ffe192',
+                  borderRadius: '14px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  width: '185px',
+                  padding: '4px 0',
+                }}
+              >
+                {opcoesOrdem.map((op) => {
+                  const isSelected = ordem === op.value;
+                  const isHovered = hoveredOrdem === op.value;
+                  return (
+                    <div
+                      key={op.value}
+                      onClick={() => {
+                        setOrdem(op.value);
+                        setIsOrdemOpen(false);
+                      }}
+                      onMouseEnter={() => setHoveredOrdem(op.value)}
+                      onMouseLeave={() => setHoveredOrdem(null)}
+                      style={{
+                        padding: '8px 14px',
+                        cursor: 'pointer',
+                        backgroundColor: isSelected
+                          ? 'rgba(255, 225, 146, 0.2)'
+                          : isHovered
+                          ? 'rgba(255, 225, 146, 0.1)'
+                          : 'transparent',
+                        color: isSelected ? '#ffe192' : '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: isSelected ? 'bold' : 'normal',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        transition: 'background-color 0.15s',
+                      }}
+                    >
+                      <span>{op.label}</span>
+                      {isSelected && <span style={{ color: '#ffe192', fontSize: '12px' }}>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
@@ -215,7 +354,7 @@ export default function TransactionTable() {
         <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ffffff', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#666666', color: '#ffe192' }}>
-              <th style={{ padding: '12px 14px', borderTopLeftRadius: '6px' }}>Data / Hora</th>
+              <th style={{ padding: '12px 14px', borderTopLeftRadius: '6px' }}>Data</th>
               <th style={{ padding: '12px 14px' }}>{labelColunaNome}</th>
               <th style={{ padding: '12px 14px' }}>Classificação</th>
               <th style={{ padding: '12px 14px' }}>Etiqueta</th>
@@ -255,7 +394,7 @@ export default function TransactionTable() {
                 </td>
               </tr>
             ) : (
-              transacoesFiltradasPelaBusca.map((item, index) => (
+              transacoesOrdenadas.map((item, index) => (
                 <tr
                   key={item.id}
                   onClick={() => setItemParaDetalhes({ ...item, tipo: abaAtiva })}
@@ -270,7 +409,7 @@ export default function TransactionTable() {
                 >
                   {/* Coluna Data / Hora */}
                   <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: '500', fontSize: '12px' }}>
-                    {formatDataHora(item.data_transacao)}
+                    {formatDataHora(item.data_transacao, item.mes)}
                   </td>
                   <td style={{ padding: '12px 14px', fontWeight: '500' }}>{item.nome}</td>
                   <td style={{ padding: '12px 14px', color: '#dddddd' }}>{item.classificacao}</td>

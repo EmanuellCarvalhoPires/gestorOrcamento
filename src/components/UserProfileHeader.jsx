@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import AccountManagerModal from './AccountManagerModal';
+import SettingsModal from './SettingsModal';
 
 export default function UserProfileHeader() {
   const {
@@ -18,6 +19,7 @@ export default function UserProfileHeader() {
   } = useBudget();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [mensagemExport, setMensagemExport] = useState('');
 
   if (!usuarioLogado) return null;
@@ -235,9 +237,12 @@ export default function UserProfileHeader() {
 
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
 
-          {/* Exportações */}
+          {/* Configurações */}
           <button
-            onClick={handleExportCSV}
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setIsSettingsModalOpen(true);
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: 'transparent',
@@ -253,27 +258,7 @@ export default function UserProfileHeader() {
             onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
             onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
           >
-            📊 Exportar Excel (.csv)
-          </button>
-
-          <button
-            onClick={handleExportPDF}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#ffffff',
-              textAlign: 'left',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
-          >
-            📄 Exportar PDF Executivo
+            ⚙️ Configurações
           </button>
 
           <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
@@ -310,6 +295,14 @@ export default function UserProfileHeader() {
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
         onCreateAccount={criarNovaConta}
+      />
+
+      {/* Modal de Configurações */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onExportCSV={handleExportCSV}
+        onExportPDF={handleExportPDF}
       />
     </div>
   );

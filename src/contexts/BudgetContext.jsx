@@ -44,6 +44,13 @@ export const BudgetProvider = ({ children }) => {
   const [categorias, setCategorias] = useState([]);
   const [etiquetaList, setEtiquetaList] = useState(['Geral']);
 
+  // Estado da Funcionalidade Caixinha (Opcional)
+  const [isCaixinhaAtiva, setIsCaixinhaAtiva] = useState(false);
+  const [saldoInicialCaixinha, setSaldoInicialCaixinha] = useState(0);
+  const [saldoCaixinhaAcumulado, setSaldoCaixinhaAcumulado] = useState(0);
+  const [modoCaixinhaVisao, setModoCaixinhaVisao] = useState('atual'); // 'atual' ou 'projetada'
+  const [horizontePrevisao, setHorizontePrevisao] = useState('completa'); // '6_meses', '1_ano', '2_anos', etc.
+
   // Modais Globais
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -219,6 +226,50 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
+  // Carrega Total da Caixinha (Acumulado de todos os meses/anos)
+  const carregarTotalCaixinha = async () => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      const res = await window.apiTurso.obterTotalCaixinha({
+        usuarioId: usuarioLogado.id,
+        contaId: contaAtiva?.id,
+      });
+      const saldoBanco = Number(res?.saldoAcumulado) || 0;
+      setSaldoCaixinhaAcumulado(saldoBanco + Number(saldoInicialCaixinha || 0));
+    } catch (err) {
+      console.error('Erro ao carregar total da caixinha:', err);
+    }
+  };
+
+  // Carrega configurações da Caixinha ao trocar de conta
+  useEffect(() => {
+    if (contaAtiva?.id) {
+      const ativaSalva = localStorage.getItem(`@gestor_caixinha_ativa_${contaAtiva.id}`) === 'true';
+      const inicialSalvo = parseFloat(localStorage.getItem(`@gestor_caixinha_inicial_${contaAtiva.id}`)) || 0;
+      setIsCaixinhaAtiva(ativaSalva);
+      setSaldoInicialCaixinha(inicialSalvo);
+    } else {
+      setIsCaixinhaAtiva(false);
+      setSaldoInicialCaixinha(0);
+    }
+  }, [contaAtiva?.id]);
+
+  const toggleCaixinha = (status) => {
+    const novoStatus = typeof status === 'boolean' ? status : !isCaixinhaAtiva;
+    setIsCaixinhaAtiva(novoStatus);
+    if (contaAtiva?.id) {
+      localStorage.setItem(`@gestor_caixinha_ativa_${contaAtiva.id}`, novoStatus ? 'true' : 'false');
+    }
+  };
+
+  const atualizarSaldoInicialCaixinha = (val) => {
+    const num = parseFloat(val) || 0;
+    setSaldoInicialCaixinha(num);
+    if (contaAtiva?.id) {
+      localStorage.setItem(`@gestor_caixinha_inicial_${contaAtiva.id}`, num.toString());
+    }
+  };
+
   useEffect(() => {
     if (usuarioLogado?.id) {
       carregarContas(usuarioLogado.id);
@@ -230,8 +281,9 @@ export const BudgetProvider = ({ children }) => {
   useEffect(() => {
     if (usuarioLogado?.id) {
       carregarTransacoes();
+      carregarTotalCaixinha();
     }
-  }, [usuarioLogado?.id, contaAtiva?.id, anoSelecionado, mesSelecionado]);
+  }, [usuarioLogado?.id, contaAtiva?.id, anoSelecionado, mesSelecionado, saldoInicialCaixinha]);
 
   const adicionarTransacao = async (novaTransacao) => {
     if (!usuarioLogado || !window.apiTurso) return;
@@ -385,6 +437,16 @@ export const BudgetProvider = ({ children }) => {
         exportarPDF,
         ANOS_LISTA,
         MESES_LISTA,
+        isCaixinhaAtiva,
+        toggleCaixinha,
+        saldoInicialCaixinha,
+        atualizarSaldoInicialCaixinha,
+        saldoCaixinhaAcumulado,
+        carregarTotalCaixinha,
+        modoCaixinhaVisao,
+        setModoCaixinhaVisao,
+        horizontePrevisao,
+        setHorizontePrevisao,
       }}
     >
       {children}

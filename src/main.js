@@ -439,8 +439,8 @@ async function realizarOAuth2Google(clientId, clientSecret) {
 // IPC Handler do Login via Google
 ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) => {
   try {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const clientId = process.env.GOOGLE_CLIENT_ID || '1023898773119-lpvurepidkav2h4s4opgpqvsjkj26j3d.apps.googleusercontent.com';
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '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';
 
     const googleProfile = await realizarOAuth2Google(clientId, clientSecret);
 
@@ -729,6 +729,132 @@ ipcMain.handle('carregar-transacoes', async (event, { usuarioId, contaId, mes, a
   }
 });
 
+const MESES_LISTA_ORDEM = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+function isMesAnteriorAoAtual(mesStr, anoStr) {
+  const agora = new Date();
+  const anoAtual = agora.getFullYear();
+  const mesAtualIndex = agora.getMonth(); // 0 para Jan, 7 para Ago
+
+  const anoInt = parseInt(anoStr, 10);
+  const mesIndex = MESES_LISTA_ORDEM.indexOf(mesStr);
+
+  if (isNaN(anoInt) || mesIndex === -1) return false;
+
+  if (anoInt < anoAtual) return true;
+  if (anoInt === anoAtual && mesIndex < mesAtualIndex) return true;
+  return false;
+}
+
+ipcMain.handle('obter-total-caixinha', async (event, { usuarioId, contaId }) => {
+  if (!usuarioId) return { totalReceitas: 0, totalDespesas: 0, saldoAcumulado: 0 };
+
+  try {
+    const filtrarConta = !!contaId;
+    let sqlReceitas = 'SELECT mes, ano, valor FROM receitas WHERE usuario_id = $1';
+    let sqlDespesas = 'SELECT mes, ano, valor FROM despesas WHERE usuario_id = $1';
+    const args = [usuarioId];
+
+    if (filtrarConta) {
+      sqlReceitas += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      sqlDespesas += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      args.push(contaId);
+    }
+
+    const [resReceitas, resDespesas] = await Promise.all([
+      pool.query(sqlReceitas, args),
+      pool.query(sqlDespesas, args),
+    ]);
+
+    let totalReceitas = 0;
+    let totalDespesas = 0;
+
+    (resReceitas.rows || []).forEach((row) => {
+      if (isMesAnteriorAoAtual(row.mes, row.ano)) {
+        totalReceitas += parseFloat(row.valor || 0);
+      }
+    });
+
+    (resDespesas.rows || []).forEach((row) => {
+      if (isMesAnteriorAoAtual(row.mes, row.ano)) {
+        totalDespesas += parseFloat(row.valor || 0);
+      }
+    });
+
+    const saldoAcumulado = totalReceitas - totalDespesas;
+
+    return { totalReceitas, totalDespesas, saldoAcumulado };
+  } catch (error) {
+    console.error('Erro ao obter total da caixinha:', error);
+    return { totalReceitas: 0, totalDespesas: 0, saldoAcumulado: 0 };
+  }
+});
+
+ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId }) => {
+  if (!usuarioId) return { success: false, historico: [] };
+
+  try {
+    const filtrarConta = !!contaId;
+    let sqlRec = 'SELECT mes, ano, SUM(valor) AS total_receitas FROM receitas WHERE usuario_id = $1';
+    let sqlDesp = 'SELECT mes, ano, SUM(valor) AS total_despesas FROM despesas WHERE usuario_id = $1';
+    const args = [usuarioId];
+
+    if (filtrarConta) {
+      sqlRec += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      sqlDesp += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      args.push(contaId);
+    }
+
+    sqlRec += ' GROUP BY ano, mes';
+    sqlDesp += ' GROUP BY ano, mes';
+
+    const [resRec, resDesp] = await Promise.all([
+      pool.query(sqlRec, args),
+      pool.query(sqlDesp, args),
+    ]);
+
+    const mapa = {};
+
+    (resRec.rows || []).forEach((row) => {
+      const key = `${row.ano}-${row.mes}`;
+      if (!mapa[key]) {
+        mapa[key] = {
+          ano: row.ano,
+          mes: row.mes,
+          receitas: 0,
+          despesas: 0,
+          isFechada: isMesAnteriorAoAtual(row.mes, row.ano),
+        };
+      }
+      mapa[key].receitas = parseFloat(row.total_receitas || 0);
+    });
+
+    (resDesp.rows || []).forEach((row) => {
+      const key = `${row.ano}-${row.mes}`;
+      if (!mapa[key]) {
+        mapa[key] = {
+          ano: row.ano,
+          mes: row.mes,
+          receitas: 0,
+          despesas: 0,
+          isFechada: isMesAnteriorAoAtual(row.mes, row.ano),
+        };
+      }
+      mapa[key].despesas = parseFloat(row.total_despesas || 0);
+    });
+
+    const lista = Object.values(mapa).sort((a, b) => {
+      if (a.ano !== b.ano) return parseInt(a.ano, 10) - parseInt(b.ano, 10);
+      return MESES_LISTA_ORDEM.indexOf(a.mes) - MESES_LISTA_ORDEM.indexOf(b.mes);
+    });
+
+    return { success: true, historico: lista };
+  } catch (error) {
+    console.error('Erro ao obter histórico da caixinha:', error);
+    return { success: false, historico: [] };
+  }
+});
+
 ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
   if (!novaTransacao.usuarioId) {
     return { success: false, error: 'Sessão de usuário inválida.' };
@@ -752,8 +878,22 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
 
   try {
     if (novaTransacao.ehFixa) {
-      for (let m = mesInicioIndex; m < 12; m++) {
+      const mesOrigem = novaTransacao.mes || mesesList[dataFinal.getMonth()];
+      const mesInicioIndex = mesesList.indexOf(mesOrigem) !== -1 ? mesesList.indexOf(mesOrigem) : dataFinal.getMonth();
+      const mesFimIndex = novaTransacao.mesFimRecorrencia ? mesesList.indexOf(novaTransacao.mesFimRecorrencia) : 11;
+      const limiteMes = mesFimIndex !== -1 ? mesFimIndex : 11;
+
+      const diaOriginal = dataFinal.getDate();
+      const horaOriginal = dataFinal.getHours();
+      const minOriginal = dataFinal.getMinutes();
+
+      let m = mesInicioIndex;
+      let anoAtualLoop = anoInicio;
+
+      while (true) {
         const mesCalculado = mesesList[m];
+        const dtDoMes = new Date(anoAtualLoop, m, diaOriginal, horaOriginal, minOriginal);
+
         await pool.query(
           `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
            VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11)`,
@@ -767,10 +907,18 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
             'Fixa',
             novaTransacao.descricao || '',
             mesCalculado,
-            anoOrigem,
-            dataFinal,
+            anoAtualLoop.toString(),
+            dtDoMes,
           ]
         );
+
+        if (m === limiteMes) break;
+
+        m++;
+        if (m > 11) {
+          m = 0;
+          anoAtualLoop++;
+        }
       }
       return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
     }
@@ -783,6 +931,10 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
       : valorInserido;
 
     if (totalParcelas > 1 && totalParcelas >= parcelaAtual) {
+      const diaOriginal = dataFinal.getDate();
+      const horaOriginal = dataFinal.getHours();
+      const minOriginal = dataFinal.getMinutes();
+
       for (let k = parcelaAtual; k <= totalParcelas; k++) {
         const offset = k - parcelaAtual;
         const totalMeses = mesInicioIndex + offset;
@@ -792,6 +944,7 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
         const mesCalculado = mesesList[mesIndex];
         const anoCalculado = (anoInicio + anosAdicionais).toString();
         const stringParcela = `${k}/${totalParcelas}`;
+        const dtDoMes = new Date(anoInicio + anosAdicionais, mesIndex, diaOriginal, horaOriginal, minOriginal);
 
         await pool.query(
           `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
@@ -807,7 +960,7 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
             novaTransacao.descricao || '',
             mesCalculado,
             anoCalculado,
-            dataFinal,
+            dtDoMes,
           ]
         );
       }
@@ -862,29 +1015,16 @@ ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, c
     if (isFixaOuParcelada && nomeBusca) {
       await pool.query(
         `UPDATE ${tabela}
-         SET nome = $1, classificacao = $2, etiqueta = $3, descricao = $4
-         WHERE usuario_id = $5 AND LOWER(TRIM(nome)) = LOWER(TRIM($6))`,
+         SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5
+         WHERE usuario_id = $6 AND LOWER(TRIM(nome)) = LOWER(TRIM($7))`,
         [
           nome.trim(),
+          parseFloat(valor || 0),
           classificacao || 'Outros',
           etiqFinal,
           descricao || '',
           usuarioId,
           nomeBusca,
-        ]
-      );
-
-      await pool.query(
-        `UPDATE ${tabela}
-         SET valor = $1, mes = $2, ano = $3, data_transacao = $4
-         WHERE id = $5 AND usuario_id = $6`,
-        [
-          parseFloat(valor || 0),
-          mesOrigem,
-          anoOrigem,
-          dataFinal,
-          id,
-          usuarioId,
         ]
       );
     } else {
@@ -907,7 +1047,7 @@ ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, c
       );
     }
 
-    return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
+    return { success: true };
   } catch (error) {
     console.error(`Erro ao editar em ${tabela}:`, error);
     return { success: false, error: error.message };
@@ -1263,8 +1403,10 @@ const createWindow = () => {
   const finalIcon = fs.existsSync(iconPng) ? iconPng : iconJpg;
 
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 850,
+    width: 1440,
+    height: 920,
+    minWidth: 1280,
+    minHeight: 850,
     title: 'Gestor de Orçamento',
     icon: finalIcon,
     autoHideMenuBar: true,
@@ -1278,7 +1420,6 @@ const createWindow = () => {
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }

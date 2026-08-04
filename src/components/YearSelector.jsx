@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function YearSelector() {
-  const { ANOS_LISTA, anoSelecionado, setAnoSelecionado } = useBudget();
+  const { ANOS_LISTA, anoSelecionado, setAnoSelecionado, isCaixinhaAtiva } = useBudget();
   const [anosLocais, setAnosLocais] = useState(ANOS_LISTA || ['2024', '2025', '2026', '2027']);
 
   const handleAdicionarAno = () => {
@@ -60,6 +60,32 @@ export default function YearSelector() {
       >
         +
       </button>
+
+      {/* Botão Caixinha Junto aos Anos */}
+      {isCaixinhaAtiva && (
+        <button
+          onClick={() => setAnoSelecionado('caixinha')}
+          title="Ver saldo acumulado da Caixinha"
+          style={{
+            padding: '8px 20px',
+            borderRadius: '6px',
+            border: anoSelecionado === 'caixinha' ? '1px solid #ffe192' : 'none',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            backgroundColor: anoSelecionado === 'caixinha' ? '#a6a6a6' : '#3e3e3e',
+            color: anoSelecionado === 'caixinha' ? '#ffe192' : '#ffffff',
+            transition: 'all 0.2s',
+            fontSize: '15px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: anoSelecionado === 'caixinha' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+          }}
+        >
+          <span>📦</span>
+          <span>Caixinha</span>
+        </button>
+      )}
     </div>
   );
 }

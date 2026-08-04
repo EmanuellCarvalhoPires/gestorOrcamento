@@ -164,6 +164,11 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 type="datetime-local"
                 value={dataTransacao}
                 onChange={(e) => setDataTransacao(e.target.value)}
+                onClick={(e) => {
+                  try {
+                    e.target.showPicker();
+                  } catch (err) {}
+                }}
                 style={{
                   width: '100%',
                   padding: '12px 12px',
@@ -171,9 +176,11 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                   border: '1px solid #737373',
                   backgroundColor: '#3e3e3e',
                   color: '#ffffff',
+                  colorScheme: 'dark',
                   fontSize: '13px',
                   outline: 'none',
                   boxSizing: 'border-box',
+                  cursor: 'pointer',
                 }}
                 required
               />
@@ -221,6 +228,37 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Descrição / Observações (Máx. 200 caracteres) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ color: '#dddddd', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
+              <span style={{ fontSize: '11px', color: (descricao || '').length > 180 ? '#ffe192' : '#aaaaaa' }}>
+                {(descricao || '').length}/200
+              </span>
+            </div>
+            <textarea
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value.slice(0, 200))}
+              maxLength={200}
+              placeholder="Observações adicionais (máx. 200 caracteres)..."
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid #737373',
+                backgroundColor: '#3e3e3e',
+                color: '#ffffff',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                minHeight: '60px',
+                maxHeight: '120px',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
           </div>
 
           {/* Botões do Rodapé */}
