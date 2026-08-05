@@ -150,18 +150,6 @@ export default function UserProfileHeader() {
             flexDirection: 'column',
           }}
         >
-          <div
-            style={{
-              padding: '8px 16px',
-              borderBottom: '1px solid #666666',
-              fontSize: '12px',
-              color: '#cccccc',
-            }}
-          >
-            Usuário:<br />
-            <strong style={{ color: '#ffe192', fontSize: '13px' }}>{usuarioLogado.email}</strong>
-          </div>
-
           {/* SEÇÃO: Minhas Contas */}
           <div style={{ padding: '8px 16px 4px 16px', fontSize: '11px', color: '#ffe192', fontWeight: 'bold', textTransform: 'uppercase' }}>
             Minhas Contas ({listContas.length})

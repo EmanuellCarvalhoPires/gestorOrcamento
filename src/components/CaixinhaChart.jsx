@@ -28,6 +28,7 @@ export default function CaixinhaChart() {
     saldoInicialCaixinha,
     modoCaixinhaVisao,
     horizontePrevisao,
+    isComercial,
   } = useBudget();
 
   const [historico, setHistorico] = useState([]);
@@ -52,27 +53,27 @@ export default function CaixinhaChart() {
 
         if (res?.success && Array.isArray(res.historico)) {
           let acumulado = Number(saldoInicialCaixinha || 0);
-          const processado = res.historico.map((item) => {
+
+          const histProcessado = res.historico.map((item) => {
             const rec = Number(item.receitas || 0);
             const desp = Number(item.despesas || 0);
             const econ = rec - desp;
-            if (item.isFechada) {
-              acumulado += econ;
-            }
+
+            acumulado += econ;
+
             return {
               ...item,
-              receitasNum: rec,
-              despesasNum: desp,
               economia: econ,
               saldoResultante: acumulado,
             };
           });
-          setHistorico(processado);
+
+          setHistorico(histProcessado);
         } else {
           setHistorico([]);
         }
       } catch (err) {
-        console.error('Erro ao carregar gráfico da caixinha:', err);
+        console.error('Erro ao carregar dados do gráfico da caixinha:', err);
         setHistorico([]);
       } finally {
         setLoading(false);
@@ -93,7 +94,9 @@ export default function CaixinhaChart() {
     ? (opcaoAtual.value === 'completa' ? faturasFechadas : faturasFechadas.slice(-opcaoAtual.meses))
     : (opcaoAtual.value === 'completa' ? faturasFuturas : faturasFuturas.slice(0, opcaoAtual.meses));
 
-  const titulo = isAtual ? '📈 Progresso da Caixinha' : '📊 Previsão de Economia Futura';
+  const titulo = isAtual
+    ? (isComercial ? '📈 Progresso da Reserva de Lucros' : '📈 Progresso da Caixinha')
+    : (isComercial ? '📊 Projeção Orçamentária Futura' : '📊 Previsão de Economia Futura');
   const subtitulo = isAtual
     ? `Histórico filtrado: ${opcaoAtual.label}`
     : `Previsão filtrada: ${opcaoAtual.label}`;

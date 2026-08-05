@@ -30,6 +30,7 @@ export default function CaixinhaDashboard() {
     setModoCaixinhaVisao,
     horizontePrevisao,
     setHorizontePrevisao,
+    isComercial,
   } = useBudget();
 
   const [historicoBruto, setHistoricoBruto] = useState([]);
@@ -138,7 +139,7 @@ export default function CaixinhaDashboard() {
           <span style={{ fontSize: '24px', flexShrink: 0 }}>📦</span>
           <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, color: '#ffe192', fontSize: '17px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Caixinha Acumulada
+              {isComercial ? 'Reserva de Lucros Corporativa' : 'Caixinha Acumulada'}
             </h3>
             <span style={{ color: '#dddddd', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
               {modoCaixinhaVisao === 'atual'
@@ -178,7 +179,7 @@ export default function CaixinhaDashboard() {
                 boxShadow: modoCaixinhaVisao === 'atual' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
-              🔒 Saldo Atual
+              {isComercial ? '🔒 Resultado Realizado' : '🔒 Saldo Atual'}
             </button>
             <button
               type="button"
@@ -197,7 +198,7 @@ export default function CaixinhaDashboard() {
                 boxShadow: modoCaixinhaVisao === 'projetada' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
-              📊 Projeção Futura
+              {isComercial ? '📊 Projeção Orçamentária' : '📊 Projeção Futura'}
             </button>
           </div>
 
@@ -228,7 +229,7 @@ export default function CaixinhaDashboard() {
         </div>
       </div>
 
-      {/* Banner Principal do Saldo da Caixinha */}
+      {/* Banner Principal do Saldo da Caixinha / Reserva de Lucros */}
       <div
         style={{
           backgroundColor: '#3e3e3e',
@@ -245,12 +246,18 @@ export default function CaixinhaDashboard() {
       >
         <div>
           <span style={{ fontSize: '13px', color: '#dddddd', fontWeight: 'bold', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            {modoCaixinhaVisao === 'atual' ? '💰 Saldo Atual Guardado na Caixinha' : '📊 Saldo Projetado Total da Caixinha'}
+            {isComercial
+              ? (modoCaixinhaVisao === 'atual' ? '💰 Saldo em Reserva de Lucros' : '📊 Saldo Projetado da Reserva')
+              : (modoCaixinhaVisao === 'atual' ? '💰 Saldo Atual Guardado na Caixinha' : '📊 Saldo Projetado Total da Caixinha')}
           </span>
           <span style={{ fontSize: '12px', color: '#aaaaaa', marginTop: '2px', display: 'block' }}>
-            {modoCaixinhaVisao === 'atual'
-              ? `Valor consolidado das economias das faturas encerradas (${opcaoHorizonte.label})`
-              : `Valor projetado considerando a extensão (${opcaoHorizonte.label})`}
+            {isComercial
+              ? (modoCaixinhaVisao === 'atual'
+                ? `Resultado líquido acumulado das faturas encerradas (${opcaoHorizonte.label})`
+                : `Resultado líquido acumulado projetado (${opcaoHorizonte.label})`)
+              : (modoCaixinhaVisao === 'atual'
+                ? `Valor consolidado das economias das faturas encerradas (${opcaoHorizonte.label})`
+                : `Valor projetado considerando a extensão (${opcaoHorizonte.label})`)}
           </span>
         </div>
 
@@ -269,7 +276,7 @@ export default function CaixinhaDashboard() {
       {/* Histórico Cronológico por Mês/Ano */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <h4 style={{ margin: 0, color: '#ffffff', fontSize: '15px', fontWeight: 'bold' }}>
-          📊 Evolução da Caixinha ({modoCaixinhaVisao === 'atual' ? `Faturas Fechadas: ${opcaoHorizonte.label}` : `Projeção: ${opcaoHorizonte.label}`})
+          📊 {isComercial ? 'Evolução da Reserva' : 'Evolução da Caixinha'} ({modoCaixinhaVisao === 'atual' ? `Faturas Fechadas: ${opcaoHorizonte.label}` : `Projeção: ${opcaoHorizonte.label}`})
         </h4>
 
         <div style={{ overflowY: 'auto', maxHeight: '340px', borderRadius: '12px', border: '1px solid #666666' }}>
@@ -278,10 +285,10 @@ export default function CaixinhaDashboard() {
               <tr style={{ backgroundColor: '#3e3e3e', color: '#ffe192' }}>
                 <th style={{ padding: '12px 14px' }}>Mês / Ano</th>
                 <th style={{ padding: '12px 14px' }}>Status</th>
-                <th style={{ padding: '12px 14px' }}>Receitas</th>
-                <th style={{ padding: '12px 14px' }}>Despesas</th>
-                <th style={{ padding: '12px 14px' }}>Economia do Mês</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Saldo da Caixinha</th>
+                <th style={{ padding: '12px 14px' }}>{isComercial ? 'Faturamento' : 'Receitas'}</th>
+                <th style={{ padding: '12px 14px' }}>{isComercial ? 'Custos' : 'Despesas'}</th>
+                <th style={{ padding: '12px 14px' }}>{isComercial ? 'Resultado do Mês' : 'Economia do Mês'}</th>
+                <th style={{ padding: '12px 14px', textAlign: 'right' }}>{isComercial ? 'Saldo da Reserva' : 'Saldo da Caixinha'}</th>
               </tr>
             </thead>
             <tbody>

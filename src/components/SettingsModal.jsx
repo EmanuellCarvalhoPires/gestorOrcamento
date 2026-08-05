@@ -1,18 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
+import { apiService } from '../services/api';
+import iconLixeira from '../../images/lixeira-de-reciclagem.png';
 
 export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPDF, onOpenCreateAccount }) {
-  const [activeTab, setActiveTab] = useState('geral');
+  const [activeTab, setActiveTab] = useState('perfil');
+  const [contaParaDeletar, setContaParaDeletar] = useState(null);
+  const [erroDeletarConta, setErroDeletarConta] = useState('');
+
   const {
+    usuarioLogado,
+    sincronizarUsuarioLogado,
     contas = [],
     contaAtiva,
     selecionarConta,
+    deletarConta,
     isCaixinhaAtiva,
     toggleCaixinha,
     saldoInicialCaixinha,
     atualizarSaldoInicialCaixinha,
     saldoCaixinhaAcumulado,
+    isComercial,
   } = useBudget();
+
+  const isAdmin = usuarioLogado?.funcao === 'admin' || usuarioLogado?.email?.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+
+  const [listaUsuariosAdmin, setListaUsuariosAdmin] = useState([]);
+  const [carregandoUsuarios, setCarregandoUsuarios] = useState(false);
+  const [usuarioParaDeletar, setUsuarioParaDeletar] = useState(null);
+  const [mensagemAdmin, setMensagemAdmin] = useState('');
+
+  const carregarUsuariosAdmin = async () => {
+    if (!isAdmin || !usuarioLogado) return;
+    setCarregandoUsuarios(true);
+    setMensagemAdmin('');
+    try {
+      const res = await apiService.listarUsuariosAdmin({ usuarioId: usuarioLogado.id });
+      if (res?.success) {
+        setListaUsuariosAdmin(res.usuarios || []);
+      } else {
+        setMensagemAdmin(res?.error || 'Erro ao carregar usuários.');
+      }
+    } catch (err) {
+      console.error('Erro ao carregar usuários admin:', err);
+    }
+    setCarregandoUsuarios(false);
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'usuarios' && isAdmin) {
+      carregarUsuariosAdmin();
+    }
+  }, [isOpen, activeTab]);
 
   const [valorInicialStr, setValorInicialStr] = useState(
     saldoInicialCaixinha ? String(saldoInicialCaixinha) : ''
@@ -134,6 +173,37 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               Opções
             </div>
 
+            {/* Opção Meu Perfil */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('perfil')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: 'none',
+                backgroundColor: activeTab === 'perfil' ? '#545454' : 'transparent',
+                color: activeTab === 'perfil' ? '#ffe192' : '#ffffff',
+                fontWeight: activeTab === 'perfil' ? 'bold' : 'normal',
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s',
+                boxShadow: activeTab === 'perfil' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span>👤</span>
+                <span>Meu Perfil</span>
+              </div>
+              {activeTab === 'perfil' && (
+                <span style={{ fontSize: '12px', color: '#ffe192' }}>●</span>
+              )}
+            </button>
+
             {/* Opção Geral */}
             <button
               type="button"
@@ -173,45 +243,52 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               </span>
             </button>
 
-            {/* Opção Contas */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('contas')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '12px',
-                border: 'none',
-                backgroundColor: activeTab === 'contas' ? '#545454' : 'transparent',
-                color: activeTab === 'contas' ? '#ffe192' : '#ffffff',
-                fontWeight: activeTab === 'contas' ? 'bold' : 'normal',
-                fontSize: '14px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s',
-                boxShadow: activeTab === 'contas' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span>💳</span>
-                <span>Contas</span>
-              </div>
-              <span
+
+
+            {/* Opção Gestão de Usuários (Apenas para Admin) */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('usuarios');
+                  carregarUsuariosAdmin();
+                }}
                 style={{
-                  fontSize: '10px',
-                  backgroundColor: '#666666',
-                  color: '#ffffff',
-                  padding: '2px 6px',
-                  borderRadius: '10px',
-                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  backgroundColor: activeTab === 'usuarios' ? '#545454' : 'transparent',
+                  color: activeTab === 'usuarios' ? '#ffe192' : '#ffffff',
+                  fontWeight: activeTab === 'usuarios' ? 'bold' : 'normal',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s',
+                  boxShadow: activeTab === 'usuarios' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
                 }}
               >
-                {contas.length}
-              </span>
-            </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>👑</span>
+                  <span>Gestão de Usuários</span>
+                </div>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    backgroundColor: '#ffe192',
+                    color: '#333333',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ADMIN
+                </span>
+              </button>
+            )}
 
             {/* Opção Caixinha */}
             <button
@@ -296,128 +373,639 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               flexDirection: 'column',
             }}
           >
-            {/* Aba Geral */}
-            {activeTab === 'geral' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <h4 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: 'bold' }}>
-                  ⚙️ Configurações Gerais
-                </h4>
+            {/* Aba Meu Perfil */}
+            {activeTab === 'perfil' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 6px 0', color: '#ffe192', fontSize: '18px', fontWeight: 'bold' }}>
+                    👤 Meu Perfil
+                  </h4>
+                  <p style={{ margin: 0, color: '#dddddd', fontSize: '13px' }}>
+                    Informações do usuário logado e gerenciamento das suas contas financeiras.
+                  </p>
+                </div>
+
+                {/* Card de Informações do Usuário */}
                 <div
                   style={{
                     backgroundColor: '#3e3e3e',
                     borderRadius: '16px',
-                    padding: '24px',
+                    padding: '20px 24px',
                     border: '1px solid #666666',
-                    textAlign: 'center',
-                    color: '#cccccc',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '20px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: '14px' }}>
-                    Novas opções de personalização e preferências gerais serão disponibilizadas nesta seção.
-                  </p>
+                  <div
+                    style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '50%',
+                      backgroundColor: '#ffe192',
+                      color: '#333333',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 'bold',
+                      fontSize: '24px',
+                      border: '3px solid #737373',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {usuarioLogado?.nome ? usuarioLogado.nome.charAt(0).toUpperCase() : 'U'}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                    <div style={{ fontSize: '17px', fontWeight: 'bold', color: '#ffffff' }}>
+                      {usuarioLogado?.nome || 'Usuário'}
+                    </div>
+                    
+                    <div style={{ fontSize: '13px', color: '#ffe192', fontWeight: 'bold', wordBreak: 'break-all' }}>
+                      ✉️ {usuarioLogado?.email || 'Nenhum e-mail cadastrado'}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          backgroundColor: '#545454',
+                          color: '#ffffff',
+                          padding: '3px 10px',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          border: '1px solid #737373',
+                        }}
+                      >
+                        {isComercial ? '🏢 Perfil Comercial / Corporativo' : '👤 Perfil Individual / Pessoal'}
+                      </span>
+
+                      {/* Classificação da Conta: Visível Apenas se for Administrador */}
+                      {isAdmin && (
+                        <span
+                          style={{
+                            backgroundColor: 'rgba(255, 225, 146, 0.2)',
+                            color: '#ffe192',
+                            padding: '3px 10px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            border: '1px solid #ffe192',
+                          }}
+                        >
+                          👑 Administrador do Sistema (Admin)
+                        </span>
+                      )}
+
+                      <span
+                        style={{
+                          backgroundColor: 'rgba(42, 157, 143, 0.2)',
+                          color: '#2a9d8f',
+                          padding: '3px 10px',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          border: '1px solid #2a9d8f',
+                        }}
+                      >
+                        🟢 Status: Ativo
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seção Minhas Contas dentro do Perfil */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, color: '#ffffff', fontSize: '16px', fontWeight: 'bold' }}>
+                        💳 Minhas Contas ({contas.length})
+                      </h4>
+                      <p style={{ margin: '2px 0 0 0', color: '#cccccc', fontSize: '12px' }}>
+                        Alterne entre suas contas financeiras ou crie novas contas para seu orçamento.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenCreateAccount) onOpenCreateAccount();
+                      }}
+                      style={{
+                        backgroundColor: '#ffe192',
+                        color: '#333333',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span>➕</span> Criar Nova Conta
+                    </button>
+                  </div>
+
+                  {/* Mensagem de Erro ao tentar excluir conta */}
+                  {erroDeletarConta && (
+                    <div
+                      style={{
+                        backgroundColor: '#d90429',
+                        color: '#ffffff',
+                        padding: '10px 16px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {erroDeletarConta}
+                    </div>
+                  )}
+
+                  {/* Lista de Contas Cadastradas */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {contas.map((c) => {
+                      const ehAtiva = c.id === contaAtiva?.id;
+                      const ehComercial = c.tipo === 'comercial';
+                      return (
+                        <div
+                          key={c.id}
+                          style={{
+                            backgroundColor: '#3e3e3e',
+                            borderRadius: '14px',
+                            padding: '14px 18px',
+                            border: ehAtiva ? '1px solid #ffe192' : '1px solid #666666',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '14px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                backgroundColor: c.cor || '#ffe192',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <div>
+                              <strong style={{ color: '#ffffff', fontSize: '14px', display: 'block' }}>
+                                {c.nome}
+                              </strong>
+                              <span style={{ color: '#aaaaaa', fontSize: '12px', marginTop: '2px', display: 'block' }}>
+                                {ehComercial ? '🏢 Conta Comercial' : '👤 Conta Individual'} {c.descricao ? `• ${c.descricao}` : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!ehAtiva) selecionarConta(c.id);
+                              }}
+                              style={{
+                                backgroundColor: ehAtiva ? '#2b4c3f' : '#545454',
+                                color: ehAtiva ? '#2a9d8f' : '#ffffff',
+                                border: ehAtiva ? '1px solid #2a9d8f' : '1px solid #737373',
+                                padding: '6px 14px',
+                                borderRadius: '10px',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                cursor: ehAtiva ? 'default' : 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {ehAtiva ? '✓ Conta Ativa' : 'Alternar para esta conta'}
+                            </button>
+
+                            {/* Botão Deletar Conta (Lixeira) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (contas.length <= 1) {
+                                  setErroDeletarConta('Você não pode excluir a sua única conta cadastrada.');
+                                  setTimeout(() => setErroDeletarConta(''), 4000);
+                                  return;
+                                }
+                                setContaParaDeletar(c);
+                              }}
+                              title="Excluir esta conta"
+                              style={{
+                                backgroundColor: '#545454',
+                                border: '1px solid #737373',
+                                borderRadius: '10px',
+                                padding: '6px 10px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#782b2b';
+                                e.currentTarget.style.borderColor = '#ff8585';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#545454';
+                                e.currentTarget.style.borderColor = '#737373';
+                              }}
+                            >
+                              <img src={iconLixeira} alt="Excluir conta" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Aba Contas */}
-            {activeTab === 'contas' && (
+            {/* Aba Gestão de Usuários (Visível Exclusivamente para Admin) */}
+            {activeTab === 'usuarios' && isAdmin && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
-                    <h4 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: 'bold' }}>
-                      💳 Minhas Contas
+                    <h4 style={{ margin: 0, color: '#ffe192', fontSize: '18px', fontWeight: 'bold' }}>
+                      👑 Gestão de Usuários ({listaUsuariosAdmin.length})
                     </h4>
                     <p style={{ margin: '4px 0 0 0', color: '#cccccc', fontSize: '13px' }}>
-                      Alterne entre suas contas financeiras ou crie novas contas para seu orçamento.
+                      Painel exclusivo de administração para controlar, gerenciar permissões e excluir usuários cadastrados.
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (onOpenCreateAccount) onOpenCreateAccount();
-                    }}
+                    onClick={carregarUsuariosAdmin}
                     style={{
-                      backgroundColor: '#ffe192',
-                      color: '#333333',
-                      border: 'none',
-                      padding: '10px 18px',
-                      borderRadius: '14px',
-                      fontSize: '13px',
+                      backgroundColor: '#545454',
+                      color: '#ffffff',
+                      border: '1px solid #737373',
+                      padding: '8px 14px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                      whiteSpace: 'nowrap',
+                      gap: '6px',
                     }}
                   >
-                    <span>➕</span> Criar Nova Conta
+                    🔄 Atualizar Lista
                   </button>
                 </div>
 
-                {/* Lista de Contas Cadastradas */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
-                  {contas.map((c) => {
-                    const ehAtiva = c.id === contaAtiva?.id;
-                    const ehComercial = c.tipo === 'comercial';
-                    return (
-                      <div
-                        key={c.id}
-                        style={{
-                          backgroundColor: '#3e3e3e',
-                          borderRadius: '16px',
-                          padding: '16px 20px',
-                          border: ehAtiva ? '1px solid #ffe192' : '1px solid #666666',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '16px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span
-                            style={{
-                              width: '12px',
-                              height: '12px',
-                              borderRadius: '50%',
-                              backgroundColor: c.cor || '#ffe192',
-                              flexShrink: 0,
-                            }}
-                          />
-                          <div>
-                            <strong style={{ color: '#ffffff', fontSize: '15px', display: 'block' }}>
-                              {c.nome}
-                            </strong>
-                            <span style={{ color: '#aaaaaa', fontSize: '12px', marginTop: '2px', display: 'block' }}>
-                              {ehComercial ? '🏢 Conta Comercial' : '👤 Conta Individual'} {c.descricao ? `• ${c.descricao}` : ''}
-                            </span>
-                          </div>
-                        </div>
+                {mensagemAdmin && (
+                  <div
+                    style={{
+                      backgroundColor: '#d90429',
+                      color: '#ffffff',
+                      padding: '10px 16px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {mensagemAdmin}
+                  </div>
+                )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!ehAtiva) selecionarConta(c.id);
-                          }}
+                {carregandoUsuarios ? (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#cccccc', fontSize: '14px' }}>
+                    Carregando usuários do banco de dados...
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {listaUsuariosAdmin.map((u) => {
+                      const ehAdminUser = u.funcao === 'admin' || u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+                      const ehEuMesmo = u.id === usuarioLogado?.id;
+                      return (
+                        <div
+                          key={u.id}
                           style={{
-                            backgroundColor: ehAtiva ? '#2b4c3f' : '#545454',
-                            color: ehAtiva ? '#2a9d8f' : '#ffffff',
-                            border: ehAtiva ? '1px solid #2a9d8f' : '1px solid #737373',
-                            padding: '8px 16px',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
-                            cursor: ehAtiva ? 'default' : 'pointer',
-                            whiteSpace: 'nowrap',
+                            backgroundColor: '#3e3e3e',
+                            borderRadius: '16px',
+                            padding: '16px 20px',
+                            border: ehAdminUser ? '1px solid #ffe192' : '1px solid #666666',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '16px',
                           }}
                         >
-                          {ehAtiva ? '✓ Conta Ativa' : 'Alternar para esta conta'}
-                        </button>
-                      </div>
-                    );
-                  })}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                            <div
+                              style={{
+                                width: '42px',
+                                height: '42px',
+                                borderRadius: '50%',
+                                backgroundColor: ehAdminUser ? '#ffe192' : '#666666',
+                                color: ehAdminUser ? '#333333' : '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                fontSize: '18px',
+                                border: ehAdminUser ? '2px solid #ffffff' : 'none',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {u.nome ? u.nome.charAt(0).toUpperCase() : 'U'}
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <strong style={{ color: '#ffffff', fontSize: '15px' }}>{u.nome}</strong>
+                                {ehEuMesmo && (
+                                  <span style={{ fontSize: '10px', backgroundColor: '#2a9d8f', color: '#ffffff', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                                    Você (Logado)
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ color: '#ffe192', fontSize: '12px', display: 'block', marginTop: '2px', wordBreak: 'break-all' }}>
+                                ✉️ {u.email}
+                              </span>
+                              <span style={{ color: '#aaaaaa', fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                                {u.perfil_uso === 'comercial' ? '🏢 Perfil Comercial' : '👤 Perfil Individual'} • Cadastro: {u.provedor === 'google' ? '🌐 Conta Google' : '🔑 E-mail & Senha'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {/* Classificação / Alterar Função (Admin vs Comum) */}
+                            <select
+                              value={u.funcao || 'comum'}
+                              disabled={u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com'}
+                              onChange={async (e) => {
+                                const novaFn = e.target.value;
+                                const res = await apiService.alterarFuncaoUsuarioAdmin({
+                                  targetUserId: u.id,
+                                  novaFuncao: novaFn,
+                                  usuarioId: usuarioLogado.id,
+                                });
+                                if (res?.success) {
+                                  carregarUsuariosAdmin();
+                                  if (sincronizarUsuarioLogado) sincronizarUsuarioLogado();
+                                }
+                              }}
+                              style={{
+                                backgroundColor: ehAdminUser ? 'rgba(255, 225, 146, 0.2)' : '#545454',
+                                color: ehAdminUser ? '#ffe192' : '#ffffff',
+                                border: ehAdminUser ? '1px solid #ffe192' : '1px solid #737373',
+                                borderRadius: '10px',
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                outline: 'none',
+                                cursor: u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com' ? 'default' : 'pointer',
+                              }}
+                            >
+                              <option value="admin" style={{ backgroundColor: '#333', color: '#ffe192' }}>👑 Admin</option>
+                              <option value="comum" style={{ backgroundColor: '#333', color: '#fff' }}>👤 Comum</option>
+                            </select>
+
+                            {/* Botão Excluir Usuário do Banco de Dados */}
+                            {!ehEuMesmo && (
+                              <button
+                                type="button"
+                                onClick={() => setUsuarioParaDeletar(u)}
+                                title="Excluir este usuário do banco de dados"
+                                style={{
+                                  backgroundColor: '#545454',
+                                  border: '1px solid #737373',
+                                  borderRadius: '10px',
+                                  padding: '6px 12px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  color: '#ff8585',
+                                  fontSize: '12px',
+                                  fontWeight: 'bold',
+                                  transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#782b2b';
+                                  e.currentTarget.style.borderColor = '#ff8585';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#545454';
+                                  e.currentTarget.style.borderColor = '#737373';
+                                }}
+                              >
+                                <img src={iconLixeira} alt="Excluir usuário" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />
+                                Excluir
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Confirmar Exclusão de Conta */}
+            {contaParaDeletar && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  zIndex: 3000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: '#444444',
+                    borderRadius: '20px',
+                    padding: '24px',
+                    width: '90%',
+                    maxWidth: '420px',
+                    border: '1px solid #ff8585',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '24px' }}>🗑️</span>
+                    <h3 style={{ margin: 0, color: '#ff8585', fontSize: '18px', fontWeight: 'bold' }}>
+                      Excluir Conta
+                    </h3>
+                  </div>
+
+                  <p style={{ margin: 0, color: '#ffffff', fontSize: '14px', lineHeight: '1.4' }}>
+                    Tem certeza que deseja excluir permanentemente a conta <strong style={{ color: '#ffe192' }}>"{contaParaDeletar.nome}"</strong>?
+                  </p>
+                  
+                  <p style={{ margin: 0, color: '#ff8585', fontSize: '12px', lineHeight: '1.3' }}>
+                    ⚠️ Todos os lançamentos e históricos de receitas e despesas vinculados a esta conta serão removidos permanentemente.
+                  </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setContaParaDeletar(null)}
+                      style={{
+                        backgroundColor: '#666666',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '10px 18px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await deletarConta(contaParaDeletar.id);
+                        if (res?.success) {
+                          setContaParaDeletar(null);
+                        } else {
+                          setErroDeletarConta(res?.error || 'Erro ao excluir conta.');
+                          setContaParaDeletar(null);
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#d90429',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '10px 18px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(217, 4, 41, 0.4)',
+                      }}
+                    >
+                      Sim, Excluir Conta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Confirmar Exclusão de Usuário pelo Admin */}
+            {usuarioParaDeletar && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                  zIndex: 3000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: '#444444',
+                    borderRadius: '20px',
+                    padding: '24px',
+                    width: '90%',
+                    maxWidth: '440px',
+                    border: '1px solid #ff8585',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '24px' }}>🚨</span>
+                    <h3 style={{ margin: 0, color: '#ff8585', fontSize: '18px', fontWeight: 'bold' }}>
+                      Excluir Usuário do Banco de Dados
+                    </h3>
+                  </div>
+
+                  <p style={{ margin: 0, color: '#ffffff', fontSize: '14px', lineHeight: '1.4' }}>
+                    Tem certeza que deseja excluir permanentemente o usuário <strong style={{ color: '#ffe192' }}>"{usuarioParaDeletar.nome}"</strong> (<span style={{ color: '#ffe192' }}>{usuarioParaDeletar.email}</span>)?
+                  </p>
+
+                  <p style={{ margin: 0, color: '#ff8585', fontSize: '12px', lineHeight: '1.3' }}>
+                    ⚠️ Todos os dados deste usuário (contas, receitas, despesas, categorias e etiquetas) serão permanentemente apagados do banco de dados PostgreSQL.
+                  </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setUsuarioParaDeletar(null)}
+                      style={{
+                        backgroundColor: '#666666',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '10px 18px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await apiService.deletarUsuarioAdmin({
+                          targetUserId: usuarioParaDeletar.id,
+                          usuarioId: usuarioLogado.id,
+                        });
+                        if (res?.success) {
+                          setUsuarioParaDeletar(null);
+                          carregarUsuariosAdmin();
+                        } else {
+                          setMensagemAdmin(res?.error || 'Erro ao excluir usuário.');
+                          setUsuarioParaDeletar(null);
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#d90429',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '10px 18px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(217, 4, 41, 0.4)',
+                      }}
+                    >
+                      Sim, Excluir Usuário
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

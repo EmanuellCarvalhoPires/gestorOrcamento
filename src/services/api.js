@@ -177,6 +177,9 @@ export const apiService = {
   },
 
   async solicitarRecuperacaoSenha({ email }) {
+    if (window.apiTurso?.solicitarRecuperacaoSenha) {
+      return window.apiTurso.solicitarRecuperacaoSenha({ email });
+    }
     return fetchWithAuth('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
@@ -184,9 +187,63 @@ export const apiService = {
   },
 
   async confirmarRecuperacaoSenha({ email, codigo, novaSenha }) {
+    if (window.apiTurso?.confirmarRecuperacaoSenha) {
+      return window.apiTurso.confirmarRecuperacaoSenha({ email, codigo, novaSenha });
+    }
     return fetchWithAuth('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ email, codigo, novaSenha }),
+    });
+  },
+
+  async enviarCodigoVerificacao({ email, nome }) {
+    if (window.apiTurso?.enviarCodigoVerificacao) {
+      return window.apiTurso.enviarCodigoVerificacao({ email, nome });
+    }
+    return fetchWithAuth('/auth/send-verification-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, nome }),
+    });
+  },
+
+  async validarCodigoVerificacao({ email, codigo }) {
+    if (window.apiTurso?.validarCodigoVerificacao) {
+      return window.apiTurso.validarCodigoVerificacao({ email, codigo });
+    }
+    return fetchWithAuth('/auth/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, codigo }),
+    });
+  },
+
+  async obterPerfilUsuario({ usuarioId }) {
+    if (window.apiTurso?.obterPerfilUsuario) {
+      return window.apiTurso.obterPerfilUsuario({ usuarioId });
+    }
+    return fetchWithAuth(`/usuarios/${usuarioId}`, { method: 'GET' });
+  },
+
+  async listarUsuariosAdmin({ usuarioId }) {
+    if (window.apiTurso?.listarUsuariosAdmin) {
+      return window.apiTurso.listarUsuariosAdmin({ usuarioId });
+    }
+    return fetchWithAuth('/admin/usuarios', { method: 'GET' });
+  },
+
+  async deletarUsuarioAdmin({ targetUserId, usuarioId }) {
+    if (window.apiTurso?.deletarUsuarioAdmin) {
+      return window.apiTurso.deletarUsuarioAdmin({ targetUserId, usuarioId });
+    }
+    return fetchWithAuth(`/admin/usuarios/${targetUserId}`, { method: 'DELETE' });
+  },
+
+  async alterarFuncaoUsuarioAdmin({ targetUserId, novaFuncao, usuarioId }) {
+    if (window.apiTurso?.alterarFuncaoUsuarioAdmin) {
+      return window.apiTurso.alterarFuncaoUsuarioAdmin({ targetUserId, novaFuncao, usuarioId });
+    }
+    return fetchWithAuth(`/admin/usuarios/${targetUserId}/funcao`, {
+      method: 'PUT',
+      body: JSON.stringify({ novaFuncao }),
     });
   },
 };

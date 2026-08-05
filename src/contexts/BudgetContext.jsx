@@ -118,6 +118,31 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
+  const sincronizarUsuarioLogado = async () => {
+    if (!usuarioLogado?.id) return;
+    try {
+      const res = await apiService.obterPerfilUsuario({ usuarioId: usuarioLogado.id });
+      if (res?.success && res.user) {
+        setUsuarioLogado((ant) => {
+          const novo = { ...ant, ...res.user };
+          if (JSON.stringify(ant) !== JSON.stringify(novo)) {
+            localStorage.setItem('@gestor_usuario', JSON.stringify(novo));
+            return novo;
+          }
+          return ant;
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar perfil do usuário:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (usuarioLogado?.id) {
+      sincronizarUsuarioLogado();
+    }
+  }, [usuarioLogado?.id]);
+
   const logout = async () => {
     await apiService.logoutUsuario();
     setUsuarioLogado(null);
@@ -170,6 +195,38 @@ export const BudgetProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Erro ao criar conta:', err);
+    }
+  };
+
+  const deletarConta = async (contaId) => {
+    if (!usuarioLogado || !contaId) return { success: false, error: 'Sessão ou conta inválida.' };
+
+    if (contas.length <= 1) {
+      return { success: false, error: 'Você não pode excluir a sua única conta registrada.' };
+    }
+
+    try {
+      let res = await apiService.deletarConta({ contaId });
+      if (!res?.success && window.apiTurso) {
+        res = await window.apiTurso.deletarConta({ contaId, usuarioId: usuarioLogado.id });
+      }
+
+      if (res?.success) {
+        const contasRestantes = contas.filter((c) => c.id !== contaId);
+        setContas(contasRestantes);
+
+        if (contaAtiva?.id === contaId && contasRestantes.length > 0) {
+          const proximaConta = contasRestantes[0];
+          setContaAtiva(proximaConta);
+          localStorage.setItem('@gestor_conta_ativa', JSON.stringify(proximaConta));
+        }
+
+        return { success: true };
+      }
+      return { success: false, error: res?.error || 'Erro ao deletar conta.' };
+    } catch (err) {
+      console.error('Erro ao deletar conta:', err);
+      return { success: false, error: err.message };
     }
   };
 
@@ -396,14 +453,16 @@ export const BudgetProvider = ({ children }) => {
     <BudgetContext.Provider
       value={{
         usuarioLogado,
+        sincronizarUsuarioLogado,
         login,
         loginGoogle,
         registrar,
         logout,
         contas: contas || [],
         contaAtiva,
-        selecionarConta,
         criarNovaConta,
+        deletarConta,
+        selecionarConta,
         isAccountModalOpen,
         setIsAccountModalOpen,
         isComercial,

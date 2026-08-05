@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function YearSelector() {
-  const { ANOS_LISTA, anoSelecionado, setAnoSelecionado, isCaixinhaAtiva } = useBudget();
+  const { ANOS_LISTA, anoSelecionado, setAnoSelecionado, isCaixinhaAtiva, isComercial } = useBudget();
   const [anosLocais, setAnosLocais] = useState(ANOS_LISTA || ['2024', '2025', '2026', '2027']);
 
   const handleAdicionarAno = () => {
@@ -61,11 +61,11 @@ export default function YearSelector() {
         +
       </button>
 
-      {/* Botão Caixinha Junto aos Anos */}
+      {/* Botão Caixinha / Reserva de Lucros Junto aos Anos */}
       {isCaixinhaAtiva && (
         <button
           onClick={() => setAnoSelecionado('caixinha')}
-          title="Ver saldo acumulado da Caixinha"
+          title={isComercial ? 'Ver Reserva de Lucros corporativa' : 'Ver saldo acumulado da Caixinha'}
           style={{
             padding: '8px 20px',
             borderRadius: '6px',
@@ -83,7 +83,7 @@ export default function YearSelector() {
           }}
         >
           <span>📦</span>
-          <span>Caixinha</span>
+          <span>{isComercial ? 'Reserva de Lucros' : 'Caixinha'}</span>
         </button>
       )}
     </div>

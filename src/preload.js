@@ -20,4 +20,12 @@ contextBridge.exposeInMainWorld('apiTurso', {
   exportarPDF: (dados) => ipcRenderer.invoke('exportar-pdf', dados),
   obterTotalCaixinha: (dados) => ipcRenderer.invoke('obter-total-caixinha', dados),
   obterHistoricoCaixinha: (dados) => ipcRenderer.invoke('obter-historico-caixinha', dados),
+  enviarCodigoVerificacao: (dados) => ipcRenderer.invoke('enviar-codigo-verificacao', dados),
+  validarCodigoVerificacao: (dados) => ipcRenderer.invoke('validar-codigo-verificacao', dados),
+  solicitarRecuperacaoSenha: (dados) => ipcRenderer.invoke('solicitar-recuperacao-senha', dados),
+  confirmarRecuperacaoSenha: (dados) => ipcRenderer.invoke('confirmar-recuperacao-senha', dados),
+  obterPerfilUsuario: (dados) => ipcRenderer.invoke('obter-perfil-usuario', dados),
+  listarUsuariosAdmin: (dados) => ipcRenderer.invoke('listar-usuarios-admin', dados),
+  deletarUsuarioAdmin: (dados) => ipcRenderer.invoke('deletar-usuario-admin', dados),
+  alterarFuncaoUsuarioAdmin: (dados) => ipcRenderer.invoke('alterar-funcao-usuario-admin', dados),
 });

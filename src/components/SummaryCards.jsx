@@ -12,6 +12,7 @@ export default function SummaryCards() {
     saldoCaixinhaAcumulado,
     mesSelecionado,
     anoSelecionado,
+    isComercial,
   } = useBudget();
 
   const formatarMoeda = (valor) => {
@@ -35,9 +36,15 @@ export default function SummaryCards() {
   const isFuturo = anoSelInt > anoAtual || (anoSelInt === anoAtual && mesSelIdx >= mesAtualIdx);
   const sufixoTempo = isTodos ? 'este ano' : 'este mês';
 
+  // Rótulos adaptativos por perfil (Comercial vs Individual)
+  const labelReceita = isComercial ? 'Vendas & Faturamento' : 'Receita';
+  const labelDespesas = isComercial ? 'Custos & Despesas' : 'Despesas';
+  const labelEconomia = isComercial ? 'Lucro Líquido' : 'Economia';
+  const labelCaixinha = isComercial ? 'Reserva de Lucros' : 'Caixinha Total';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-      {/* Card Receita */}
+      {/* Card Receita / Faturamento */}
       <div
         style={{
           backgroundColor: '#666666',
@@ -50,10 +57,10 @@ export default function SummaryCards() {
           boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
         }}
       >
-        Receita: R$ {formatarMoeda(totalReceitas)}
+        {labelReceita}: R$ {formatarMoeda(totalReceitas)}
       </div>
 
-      {/* Card Despesas */}
+      {/* Card Despesas / Custos */}
       <div
         style={{
           backgroundColor: '#666666',
@@ -66,10 +73,10 @@ export default function SummaryCards() {
           boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
         }}
       >
-        Despesas: R$ {formatarMoeda(totalDespesas)}
+        {labelDespesas}: R$ {formatarMoeda(totalDespesas)}
       </div>
 
-      {/* Card Economia (Exibido apenas se a Caixinha NÃO estiver ativa) */}
+      {/* Card Economia / Lucro Líquido (Exibido apenas se a Caixinha NÃO estiver ativa) */}
       {!isCaixinhaAtiva && (
         <div
           style={{
@@ -83,11 +90,11 @@ export default function SummaryCards() {
             boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
           }}
         >
-          Economia: R$ {formatarMoeda(economia)}
+          {labelEconomia}: R$ {formatarMoeda(economia)}
         </div>
       )}
 
-      {/* Card Caixinha (Exibido quando Ativada) */}
+      {/* Card Caixinha / Reserva de Lucros (Exibido quando Ativada) */}
       {isCaixinhaAtiva && (
         <div
           style={{
@@ -105,7 +112,7 @@ export default function SummaryCards() {
           }}
         >
           <div style={{ fontSize: '13px', color: '#ffffff', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <span>📦</span> Caixinha Total:
+            <span>📦</span> {labelCaixinha}:
           </div>
           <div style={{ fontSize: '20px', fontWeight: '800', color: saldoCaixinhaAcumulado >= 0 ? '#ffe192' : '#ff8585' }}>
             R$ {formatarMoeda(saldoCaixinhaAcumulado)}
@@ -124,15 +131,15 @@ export default function SummaryCards() {
           >
             {isFuturo ? (
               economia > 0
-                ? `▲ +R$ ${formatarMoeda(economia)} a ser guardado ${sufixoTempo}`
+                ? (isComercial ? `▲ +R$ ${formatarMoeda(economia)} a ser destinado à reserva ${sufixoTempo}` : `▲ +R$ ${formatarMoeda(economia)} a ser guardado ${sufixoTempo}`)
                 : economia < 0
-                ? `▼ -R$ ${formatarMoeda(Math.abs(economia))} a ser retirado ${sufixoTempo}`
-                : `• Sem variação a ser guardada ${sufixoTempo}`
+                ? (isComercial ? `▼ -R$ ${formatarMoeda(Math.abs(economia))} a ser retirado da reserva ${sufixoTempo}` : `▼ -R$ ${formatarMoeda(Math.abs(economia))} a ser retirado ${sufixoTempo}`)
+                : `• Sem variação ${sufixoTempo}`
             ) : (
               economia > 0
-                ? `▲ +R$ ${formatarMoeda(economia)} guardados ${sufixoTempo}`
+                ? (isComercial ? `▲ +R$ ${formatarMoeda(economia)} destinados à reserva ${sufixoTempo}` : `▲ +R$ ${formatarMoeda(economia)} guardados ${sufixoTempo}`)
                 : economia < 0
-                ? `▼ -R$ ${formatarMoeda(Math.abs(economia))} retirados ${sufixoTempo}`
+                ? (isComercial ? `▼ -R$ ${formatarMoeda(Math.abs(economia))} retirados da reserva ${sufixoTempo}` : `▼ -R$ ${formatarMoeda(Math.abs(economia))} retirados ${sufixoTempo}`)
                 : `• Sem variação no período`
             )}
           </div>

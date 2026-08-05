@@ -5,16 +5,53 @@ import http from 'node:http';
 import started from 'electron-squirrel-startup';
 import dotenv from 'dotenv';
 import crypto from 'node:crypto';
+import dns from 'node:dns';
+import net from 'node:net';
+import nodemailer from 'nodemailer';
 import pg from 'pg';
 
 const { Pool } = pg;
 
+// Carrega as variáveis do .env de múltiplos caminhos possíveis (desenvolvimento e build de produção)
+const envPaths = [
+  path.resolve(process.cwd(), '.env'),
+  path.join(process.resourcesPath || '', '.env'),
+  path.join(__dirname, '..', '.env'),
+];
+
+for (const p of envPaths) {
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p });
+  }
+}
+dotenv.config();
+
+// Armazena temporariamente códigos de verificação de 6 dígitos em memória
+const codigosVerificacao = new Map();
+
+function criarTransporterNodemailer() {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  const smtpUser = process.env.SMTP_USER || 'gestororc@gmail.com';
+  const smtpPass = process.env.SMTP_PASS || 'cvfeowfdngseznfi';
+
+  if (!smtpUser || !smtpPass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+}
+
 // Remove a barra de menu nativa padrão (File, Edit, View, Window)
 Menu.setApplicationMenu(null);
-
-// Carrega as variáveis do .env na raiz do projeto
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config();
 
 if (started) {
   app.quit();
@@ -119,6 +156,7 @@ async function initDatabase() {
         email VARCHAR(255) UNIQUE NOT NULL,
         senha_hash VARCHAR(255),
         perfil_uso VARCHAR(50) DEFAULT 'individual',
+        funcao VARCHAR(50) DEFAULT 'comum',
         avatar_url TEXT,
         google_id VARCHAR(255) UNIQUE,
         provedor VARCHAR(50) DEFAULT 'local',
@@ -129,6 +167,8 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE usuarios ALTER COLUMN senha_hash DROP NOT NULL;`);
     await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;`);
     await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provedor VARCHAR(50) DEFAULT 'local';`);
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcao VARCHAR(50) DEFAULT 'comum';`);
+    await pool.query(`UPDATE usuarios SET funcao = 'admin' WHERE LOWER(email) = 'emanuell.carvalho.pires@gmail.com';`);
 
     // 2. Tabela de Contas
     await pool.query(`
@@ -224,10 +264,284 @@ async function initDatabase() {
   }
 }
 
+const KNOWN_VALID_DOMAINS = new Set([
+  'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.com.br',
+  'icloud.com', 'live.com', 'msn.com', 'uol.com.br', 'bol.com.br',
+  'terra.com.br', 'ig.com.br', 'proton.me', 'protonmail.com', 'aol.com'
+]);
+
+const DISPOSABLE_DOMAINS_LIST = new Set([
+  'mailinator.com', 'tempmail.com', '10minutemail.com', 'yopmail.com',
+  'trashmail.com', 'dispostable.com', 'guerrillamail.com', 'sharklasers.com',
+  'getnada.com', 'temp-mail.org', 'fakeinbox.com', 'crazymailing.com',
+  'throwawaymail.com', 'maildrop.cc', 'dayrep.com', 'teleworm.us',
+  'mailcatch.com', 'inboxalias.com', 'mohmal.com'
+]);
+
+const COMMON_TYPOS_MAP = {
+  'gmai.com': 'gmail.com',
+  'gmaill.com': 'gmail.com',
+  'gmal.com': 'gmail.com',
+  'gamil.com': 'gmail.com',
+  'gmail.com.br': 'gmail.com',
+  'gamil.com.br': 'gmail.com',
+  'hotmai.com': 'hotmail.com',
+  'hotmaill.com': 'hotmail.com',
+  'outloo.com': 'outlook.com',
+  'outlok.com': 'outlook.com',
+  'yaho.com': 'yahoo.com',
+  'yahoo.com.brr': 'yahoo.com.br',
+  'icloud.co': 'icloud.com'
+};
+
+async function validarExistenciaEmailBackend(email) {
+  if (!email || typeof email !== 'string') {
+    return { valido: false, erro: 'Informe um endereço de e-mail válido.' };
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const regexSyntax = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+  if (!regexSyntax.test(cleanEmail)) {
+    return { valido: false, erro: 'Formato de e-mail inválido. Verifique o e-mail digitado (ex: usuario@dominio.com).' };
+  }
+
+  const partes = cleanEmail.split('@');
+  if (partes.length !== 2) return { valido: false, erro: 'E-mail malformatado.' };
+
+  const [usuario, dominio] = partes;
+
+  if (usuario.length < 2) {
+    return { valido: false, erro: 'O nome de usuário do e-mail é curto demais.' };
+  }
+
+  // Erro de digitação comum em domínios populares (ex: @gmail.com.br)
+  if (COMMON_TYPOS_MAP[dominio]) {
+    return { valido: false, erro: `Você quis dizer @${COMMON_TYPOS_MAP[dominio]} ao invés de @${dominio}?` };
+  }
+
+  // Bloqueio de e-mails descartáveis/temporários
+  if (DISPOSABLE_DOMAINS_LIST.has(dominio)) {
+    return { valido: false, erro: 'E-mails temporários ou descartáveis não são aceitos.' };
+  }
+
+  // Se o domínio for um provedor público de e-mail reconhecido (gmail.com, hotmail.com, etc.), é 100% válido!
+  if (KNOWN_VALID_DOMAINS.has(dominio)) {
+    return { valido: true, emailLimpo: cleanEmail };
+  }
+
+  // Para domínios corporativos/personalizados desconhecidos: faz checagem de registros MX com fallback seguro
+  try {
+    const mxRecords = await dns.promises.resolveMx(dominio);
+    if (!mxRecords || mxRecords.length === 0) {
+      return { valido: false, erro: `O domínio @${dominio} não possui um servidor de e-mail ativo.` };
+    }
+  } catch (err) {
+    // Em caso de falha de rede/DNS local, não bloqueia o usuário legítimo
+    console.warn('Aviso: Não foi possível verificar os registros MX do domínio personalizado:', dominio, err.message);
+  }
+
+  return { valido: true, emailLimpo: cleanEmail };
+}
+
 // --- IPC HANDLERS ---
+
+ipcMain.handle('enviar-codigo-verificacao', async (event, { email, nome }) => {
+  try {
+    const checagemEmail = await validarExistenciaEmailBackend(email);
+    if (!checagemEmail.valido) {
+      return { success: false, error: checagemEmail.erro };
+    }
+
+    const emailLimpo = email.trim().toLowerCase();
+
+    // Verifica se já existe usuário cadastrado
+    const checkEmail = await pool.query(
+      'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [emailLimpo]
+    );
+
+    if (checkEmail.rows.length > 0) {
+      return { success: false, error: 'Este e-mail já está cadastrado no sistema.' };
+    }
+
+    // Gera um código de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiraEm = Date.now() + 10 * 60 * 1000; // 10 minutos de validade
+
+    codigosVerificacao.set(emailLimpo, { codigo, expiraEm });
+
+    const transporter = criarTransporterNodemailer();
+
+    if (!transporter) {
+      console.log(`\n======================================================`);
+      console.log(`🔑 CÓDIGO DE VERIFICAÇÃO GERADO PARA [${emailLimpo}]: ${codigo}`);
+      console.log(`======================================================\n`);
+      return {
+        success: false,
+        error: 'Servidor de e-mail (SMTP) não configurado no arquivo .env.',
+      };
+    }
+
+    try {
+      const info = await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"Gestor de Orçamento" <${process.env.SMTP_USER}>`,
+        to: emailLimpo,
+        subject: `🔑 Seu Código de Verificação: ${codigo}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; background-color: #2b2b2b; color: #ffffff; border-radius: 16px; border: 1px solid #ffe192;">
+            <h2 style="color: #ffe192; text-align: center; margin-bottom: 20px;">Gestor de Orçamento</h2>
+            <p style="font-size: 15px; line-height: 1.5; color: #e0e0e0;">Olá, <strong>${nome || 'Usuário'}</strong>!</p>
+            <p style="font-size: 14px; line-height: 1.5; color: #cccccc;">Utilize o código de verificação abaixo para concluir a criação da sua conta no aplicativo:</p>
+            <div style="background-color: #3e3e3e; padding: 18px; text-align: center; border-radius: 12px; margin: 24px 0; border: 1px dashed #ffe192;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #ffe192;">${codigo}</span>
+            </div>
+            <p style="font-size: 12px; color: #aaaaaa; text-align: center;">Este código é válido por 10 minutos.</p>
+          </div>
+        `,
+      });
+      console.log('E-mail de verificação enviado com sucesso:', info.messageId);
+      return { success: true, message: `Código de verificação enviado para ${emailLimpo} com sucesso! Verifique a caixa de entrada.` };
+    } catch (smtpErr) {
+      console.error('⚠️ Falha na autenticação SMTP ao enviar e-mail:', smtpErr.message);
+      return {
+        success: false,
+        error: `Não foi possível enviar o e-mail real (${smtpErr.message}). Verifique a Senha de App do Gmail no arquivo .env.`,
+      };
+    }
+  } catch (err) {
+    console.error('Erro ao enviar código de verificação:', err);
+    return { success: false, error: 'Falha ao processar envio do código de verificação.' };
+  }
+});
+
+ipcMain.handle('validar-codigo-verificacao', async (event, { email, codigo }) => {
+  if (!email || !codigo) {
+    return { success: false, error: 'Informe o código de verificação de 6 dígitos.' };
+  }
+
+  const emailLimpo = email.trim().toLowerCase();
+  const registro = codigosVerificacao.get(emailLimpo);
+
+  if (!registro) {
+    return { success: false, error: 'Nenhum código foi solicitado para este e-mail ou o código expirou.' };
+  }
+
+  if (Date.now() > registro.expiraEm) {
+    codigosVerificacao.delete(emailLimpo);
+    return { success: false, error: 'O código de verificação expirou. Solicite um novo código.' };
+  }
+
+  if (registro.codigo !== codigo.trim()) {
+    return { success: false, error: 'Código de verificação incorreto. Verifique os 6 dígitos digitados.' };
+  }
+
+  // Código validado com sucesso
+  codigosVerificacao.delete(emailLimpo);
+  return { success: true };
+});
+
+ipcMain.handle('solicitar-recuperacao-senha', async (event, { email }) => {
+  try {
+    if (!email) return { success: false, error: 'Informe seu e-mail cadastrado.' };
+
+    const emailLimpo = email.trim().toLowerCase();
+    const checkUser = await pool.query('SELECT id, nome FROM usuarios WHERE LOWER(email) = LOWER($1)', [emailLimpo]);
+
+    if (checkUser.rows.length === 0) {
+      return { success: false, error: 'E-mail não encontrado no sistema.' };
+    }
+
+    const usuario = checkUser.rows[0];
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiraEm = Date.now() + 10 * 60 * 1000;
+
+    codigosVerificacao.set(`reset_${emailLimpo}`, { codigo, expiraEm });
+
+    const transporter = criarTransporterNodemailer();
+
+    if (!transporter) {
+      console.log(`\n======================================================`);
+      console.log(`🔑 CÓDIGO DE RECUPERAÇÃO DE SENHA PARA [${emailLimpo}]: ${codigo}`);
+      console.log(`======================================================\n`);
+      return {
+        success: false,
+        error: 'Servidor de e-mail (SMTP) não configurado no arquivo .env.',
+      };
+    }
+
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"Gestor de Orçamento" <${process.env.SMTP_USER}>`,
+        to: emailLimpo,
+        subject: `🔑 Redefinição de Senha: ${codigo}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; background-color: #2b2b2b; color: #ffffff; border-radius: 16px; border: 1px solid #ffe192;">
+            <h2 style="color: #ffe192; text-align: center; margin-bottom: 20px;">Gestor de Orçamento</h2>
+            <p style="font-size: 15px; color: #e0e0e0;">Olá, <strong>${usuario.nome}</strong>!</p>
+            <p style="font-size: 14px; color: #cccccc;">Recebemos uma solicitação de redefinição de senha para sua conta. Utilize o código de 6 dígitos abaixo:</p>
+            <div style="background-color: #3e3e3e; padding: 18px; text-align: center; border-radius: 12px; margin: 24px 0; border: 1px dashed #ffe192;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #ffe192;">${codigo}</span>
+            </div>
+            <p style="font-size: 12px; color: #aaaaaa; text-align: center;">Este código expira em 10 minutos.</p>
+          </div>
+        `,
+      });
+      return { success: true, message: `Código de redefinição de 6 dígitos enviado para ${emailLimpo} com sucesso! Verifique a caixa de entrada.` };
+    } catch (smtpErr) {
+      console.error('⚠️ Falha no SMTP ao enviar e-mail de recuperação:', smtpErr.message);
+      return {
+        success: false,
+        error: `Não foi possível enviar o e-mail real (${smtpErr.message}). Verifique a Senha de App do Gmail no arquivo .env.`,
+      };
+    }
+  } catch (err) {
+    console.error('Erro em solicitar-recuperacao-senha:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('confirmar-recuperacao-senha', async (event, { email, codigo, novaSenha }) => {
+  try {
+    if (!email || !codigo || !novaSenha) {
+      return { success: false, error: 'Preencha todos os campos.' };
+    }
+
+    const emailLimpo = email.trim().toLowerCase();
+    const registro = codigosVerificacao.get(`reset_${emailLimpo}`);
+
+    if (!registro) {
+      return { success: false, error: 'Nenhum código solicitado ou o código expirou.' };
+    }
+
+    if (Date.now() > registro.expiraEm) {
+      codigosVerificacao.delete(`reset_${emailLimpo}`);
+      return { success: false, error: 'O código de redefinição expirou. Solicite um novo.' };
+    }
+
+    if (registro.codigo !== codigo.trim()) {
+      return { success: false, error: 'Código de redefinição incorreto. Verifique os 6 dígitos digitados.' };
+    }
+
+    const { hashSenha: novaSenhaHash } = hashSenha(novaSenha);
+
+    await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE LOWER(email) = LOWER($2)', [novaSenhaHash, emailLimpo]);
+    codigosVerificacao.delete(`reset_${emailLimpo}`);
+
+    return { success: true, message: 'Senha redefinida com sucesso!' };
+  } catch (err) {
+    console.error('Erro em confirmar-recuperacao-senha:', err);
+    return { success: false, error: err.message };
+  }
+});
 
 ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUso = 'individual' }) => {
   try {
+    const checagemEmail = await validarExistenciaEmailBackend(email);
+    if (!checagemEmail.valido) {
+      return { success: false, error: checagemEmail.erro };
+    }
+
     const checkEmail = await pool.query(
       'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
       [email.trim()]
@@ -267,9 +581,18 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUs
       );
     }
 
+    const ehAdminOwner = email.toLowerCase().trim() === 'emanuell.carvalho.pires@gmail.com';
+    const funcaoFinal = ehAdminOwner ? 'admin' : 'comum';
+
     return {
       success: true,
-      user: { id: userId, nome: nome.trim(), email: email.toLowerCase().trim(), perfilUso: perfilFinal },
+      user: {
+        id: userId,
+        nome: nome.trim(),
+        email: email.toLowerCase().trim(),
+        perfilUso: perfilFinal,
+        funcao: funcaoFinal,
+      },
       contaInicial: resConta.rows[0],
     };
   } catch (error) {
@@ -296,9 +619,18 @@ ipcMain.handle('login-usuario', async (event, { email, senha }) => {
       return { success: false, error: 'Senha incorreta.' };
     }
 
+    const ehAdminOwner = usuario.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+    const funcaoFinal = usuario.funcao || (ehAdminOwner ? 'admin' : 'comum');
+
     return {
       success: true,
-      user: { id: usuario.id, nome: usuario.nome, email: usuario.email, perfilUso: usuario.perfil_uso || 'individual' },
+      user: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        perfilUso: usuario.perfil_uso || 'individual',
+        funcao: funcaoFinal,
+      },
     };
   } catch (error) {
     console.error('Erro no login:', error);
@@ -505,14 +837,142 @@ ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) 
       [userId]
     );
 
+    const ehAdminOwner = emailLimpo === 'emanuell.carvalho.pires@gmail.com';
+    const userRes = await pool.query('SELECT funcao FROM usuarios WHERE id = $1', [userId]);
+    const funcaoFinal = userRes.rows[0]?.funcao || (ehAdminOwner ? 'admin' : 'comum');
+
     return {
       success: true,
-      user: { id: userId, nome: nomeUsuario, email: emailLimpo, perfilUso: perfilFinal, avatarUrl },
+      user: {
+        id: userId,
+        nome: nomeUsuario,
+        email: emailLimpo,
+        perfilUso: perfilFinal,
+        avatarUrl,
+        funcao: funcaoFinal,
+      },
       contaInicial: contasRes.rows[0],
     };
   } catch (error) {
     console.error('Erro no login do Google:', error);
     return { success: false, error: 'Erro ao autenticar com o Google.' };
+  }
+});
+
+// --- ADMIN IPC HANDLERS ---
+
+ipcMain.handle('listar-usuarios-admin', async (event, { usuarioId }) => {
+  try {
+    if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
+
+    const checkAdmin = await pool.query('SELECT email, funcao FROM usuarios WHERE id = $1', [usuarioId]);
+    if (checkAdmin.rows.length === 0) return { success: false, error: 'Usuário não encontrado.' };
+
+    const requestingUser = checkAdmin.rows[0];
+    const isEmailAdmin = requestingUser.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+    const isRoleAdmin = requestingUser.funcao === 'admin';
+
+    if (!isEmailAdmin && !isRoleAdmin) {
+      return { success: false, error: 'Acesso negado. Apenas o Administrador pode listar usuários.' };
+    }
+
+    const res = await pool.query(
+      'SELECT id, nome, email, funcao, perfil_uso, provedor, criado_em FROM usuarios ORDER BY criado_em DESC'
+    );
+
+    const usuariosFormatados = res.rows.map((u) => ({
+      ...u,
+      funcao: u.funcao || (u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com' ? 'admin' : 'comum'),
+    }));
+
+    return { success: true, usuarios: usuariosFormatados };
+  } catch (err) {
+    console.error('Erro ao listar usuários:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('deletar-usuario-admin', async (event, { targetUserId, usuarioId }) => {
+  try {
+    if (!usuarioId || !targetUserId) return { success: false, error: 'Parâmetros inválidos.' };
+
+    const checkAdmin = await pool.query('SELECT email, funcao FROM usuarios WHERE id = $1', [usuarioId]);
+    if (checkAdmin.rows.length === 0) return { success: false, error: 'Usuário administrador não encontrado.' };
+
+    const requestingUser = checkAdmin.rows[0];
+    const isEmailAdmin = requestingUser.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+    const isRoleAdmin = requestingUser.funcao === 'admin';
+
+    if (!isEmailAdmin && !isRoleAdmin) {
+      return { success: false, error: 'Acesso negado. Apenas o Administrador pode excluir usuários.' };
+    }
+
+    if (targetUserId === usuarioId) {
+      return { success: false, error: 'Você não pode excluir sua própria conta de Administrador.' };
+    }
+
+    await pool.query('DELETE FROM usuarios WHERE id = $1', [targetUserId]);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao deletar usuário pelo Admin:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('alterar-funcao-usuario-admin', async (event, { targetUserId, novaFuncao, usuarioId }) => {
+  try {
+    if (!usuarioId || !targetUserId || !novaFuncao) return { success: false, error: 'Parâmetros inválidos.' };
+
+    const checkAdmin = await pool.query('SELECT email, funcao FROM usuarios WHERE id = $1', [usuarioId]);
+    if (checkAdmin.rows.length === 0) return { success: false, error: 'Usuário administrador não encontrado.' };
+
+    const requestingUser = checkAdmin.rows[0];
+    const isEmailAdmin = requestingUser.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+    const isRoleAdmin = requestingUser.funcao === 'admin';
+
+    if (!isEmailAdmin && !isRoleAdmin) {
+      return { success: false, error: 'Acesso negado.' };
+    }
+
+    await pool.query('UPDATE usuarios SET funcao = $1 WHERE id = $2', [novaFuncao, targetUserId]);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao alterar função do usuário:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('obter-perfil-usuario', async (event, { usuarioId }) => {
+  if (!usuarioId) return { success: false, error: 'ID do usuário não fornecido.' };
+  try {
+    const res = await pool.query(
+      'SELECT id, nome, email, funcao, perfil_uso, avatar_url, provedor FROM usuarios WHERE id = $1',
+      [usuarioId]
+    );
+
+    if (res.rows.length === 0) return { success: false, error: 'Usuário não encontrado.' };
+
+    const u = res.rows[0];
+    const ehAdminOwner = u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+    const funcaoFinal = u.funcao || (ehAdminOwner ? 'admin' : 'comum');
+
+    return {
+      success: true,
+      user: {
+        id: u.id,
+        nome: u.nome,
+        email: u.email,
+        perfilUso: u.perfil_uso || 'individual',
+        avatarUrl: u.avatar_url || '',
+        provedor: u.provedor || 'local',
+        funcao: funcaoFinal,
+      },
+    };
+  } catch (err) {
+    console.error('Erro em obter-perfil-usuario:', err);
+    return { success: false, error: err.message };
   }
 });
 
