@@ -227,12 +227,12 @@ export default function AuthView() {
             boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
           }}
         >
-          <img src={appIcon} alt="Logo Gestor de Orçamento" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={appIcon} alt="Logo Simple Finances" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
 
         {/* Título e Subtítulo */}
         <h2 style={{ margin: '0 0 8px 0', color: '#ffe192', fontSize: '26px', textAlign: 'center' }}>
-          Gestor de Orçamento
+          Simple Finances
         </h2>
         <p style={{ margin: '0 0 24px 0', color: '#dddddd', fontSize: '14px', textAlign: 'center' }}>
           {isEsqueciSenha

@@ -68,9 +68,15 @@ yarn-debug.log*
 yarn-error.log*
 
 # ====================
-# EDITORES
+# EDITORES, AGENTES & SCRIPTS TEMPORÁRIOS
 # ====================
 .idea/
 .vscode/
 *.suo
 *.user
+.agents/
+scripts_temp/
+server/
+0.30.0
+*.txt
+*.pub

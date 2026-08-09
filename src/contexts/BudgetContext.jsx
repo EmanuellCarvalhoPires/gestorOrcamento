@@ -1,7 +1,149 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/api.js';
 
 const BudgetContext = createContext();
+
+export const PALETAS_PREDEFINIDAS = [
+  {
+    id: 'dourado_nobre',
+    nome: '👑 Dourado Nobre',
+    descricao: 'Tema escuro clássico com detalhes dourados',
+    cores: {
+      bgPrimary: '#3a3a3a',
+      cardBg: '#545454',
+      surfaceBg: '#3e3e3e',
+      accentColor: '#ffe192',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'esmeralda_cyber',
+    nome: '🌿 Esmeralda Cyber',
+    descricao: 'Tema tecnológico moderno em tons de verde neon',
+    cores: {
+      bgPrimary: '#1e293b',
+      cardBg: '#334155',
+      surfaceBg: '#0f172a',
+      accentColor: '#50fa7b',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'ciano_tech',
+    nome: '⚡ Ciano Tech',
+    descricao: 'Estilo cyber futurista com ciano vibrante',
+    cores: {
+      bgPrimary: '#121824',
+      cardBg: '#1f293d',
+      surfaceBg: '#161f30',
+      accentColor: '#00f5d4',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'violeta_amethyst',
+    nome: '🔮 Violeta Amethyst',
+    descricao: 'Visual místico e elegante em tons de roxo profundo',
+    cores: {
+      bgPrimary: '#1a102f',
+      cardBg: '#281a46',
+      surfaceBg: '#1e1337',
+      accentColor: '#c084fc',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'sunset_coral',
+    nome: '🌅 Sunset Coral',
+    descricao: 'Cores quentes e acolhedoras em tons de vinho e coral',
+    cores: {
+      bgPrimary: '#2b1e1e',
+      cardBg: '#3f2d2d',
+      surfaceBg: '#221616',
+      accentColor: '#ff758f',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'ocean_deep',
+    nome: '🌊 Azul Oceano',
+    descricao: 'Tons de azul profundo e marinho com azul céu',
+    cores: {
+      bgPrimary: '#0f172a',
+      cardBg: '#1e293b',
+      surfaceBg: '#111827',
+      accentColor: '#38bdf8',
+      textPrimary: '#ffffff',
+    },
+  },
+  {
+    id: 'modo_claro',
+    nome: '☀️ Modo Claro Elegante',
+    descricao: 'Tema claro limpo, elegante e de alto contraste',
+    cores: {
+      bgPrimary: '#f3f4f6',
+      cardBg: '#d9d9d9',
+      surfaceBg: '#e5e7eb',
+      accentColor: '#d97706',
+      textPrimary: '#1f2937',
+    },
+  },
+];
+
+const PALETA_PADRAO = PALETAS_PREDEFINIDAS[0].cores;
+
+export const aplicarVariaveisCSS = (cores) => {
+  if (!cores) return;
+  const root = document.documentElement;
+
+  const bgPrimary = cores.bgPrimary || '#3a3a3a';
+  const cardBg = cores.cardBg || '#545454';
+  const surfaceBg = cores.surfaceBg || '#3e3e3e';
+  const accentColor = cores.accentColor || '#ffe192';
+
+  const getLuminance = (hex) => {
+    if (!hex || typeof hex !== 'string') return 0;
+    const clean = hex.replace('#', '').trim();
+    if (clean.length !== 6 && clean.length !== 3) return 0;
+    const r = parseInt(clean.length === 3 ? clean[0] + clean[0] : clean.substring(0, 2), 16);
+    const g = parseInt(clean.length === 3 ? clean[1] + clean[1] : clean.substring(2, 4), 16);
+    const b = parseInt(clean.length === 3 ? clean[2] + clean[2] : clean.substring(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  };
+
+  const isCardLight = getLuminance(cardBg) > 0.55;
+  const isBgLight = getLuminance(bgPrimary) > 0.55;
+  const isLight = isCardLight || isBgLight;
+
+  // Garante que se o fundo for claro, o texto principal seja escuro de alto contraste
+  let textPrimary = cores.textPrimary || (isLight ? '#1f2937' : '#ffffff');
+  if (isCardLight && getLuminance(textPrimary) > 0.5) {
+    textPrimary = '#1f2937';
+  }
+
+  // Garante que a superficie do input seja legivel e contrastante com o cardBg
+  let adjustedSurfaceBg = surfaceBg;
+  if (isCardLight && getLuminance(surfaceBg) < 0.3) {
+    adjustedSurfaceBg = '#f3f4f6';
+  }
+
+  root.style.setProperty('--bg-primary', bgPrimary);
+  root.style.setProperty('--card-bg', cardBg);
+  root.style.setProperty('--surface-bg', adjustedSurfaceBg);
+  root.style.setProperty('--accent-color', accentColor);
+  root.style.setProperty('--text-primary', textPrimary);
+
+  // Variáveis derivadas para 100% de cobertura nos componentes
+  root.style.setProperty('--header-bg', isLight ? '#e5e7eb' : adjustedSurfaceBg);
+  root.style.setProperty('--surface-hover', isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)');
+  root.style.setProperty('--text-secondary', isLight ? '#4b5563' : '#cccccc');
+  root.style.setProperty('--border-color', isLight ? '#d1d5db' : 'rgba(255, 255, 255, 0.15)');
+  
+  const accentLuminance = getLuminance(accentColor);
+  root.style.setProperty('--accent-text', accentLuminance > 0.5 ? '#1e1e1e' : '#ffffff');
+
+  root.style.colorScheme = isLight ? 'light' : 'dark';
+};
 
 const ANOS_LISTA = ['2024', '2025', '2026', '2027'];
 const MESES_LISTA = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -50,6 +192,53 @@ export const BudgetProvider = ({ children }) => {
   const [saldoCaixinhaAcumulado, setSaldoCaixinhaAcumulado] = useState(0);
   const [modoCaixinhaVisao, setModoCaixinhaVisao] = useState('atual'); // 'atual' ou 'projetada'
   const [horizontePrevisao, setHorizontePrevisao] = useState('completa'); // '6_meses', '1_ano', '2_anos', etc.
+
+  // Estado da Paleta de Cores & Temas Dinâmicos
+  const [paletaCores, setPaletaCores] = useState(() => {
+    try {
+      const salva = localStorage.getItem('@gestor_paleta_cores');
+      const cores = salva ? JSON.parse(salva) : PALETA_PADRAO;
+      aplicarVariaveisCSS(cores);
+      return cores;
+    } catch {
+      aplicarVariaveisCSS(PALETA_PADRAO);
+      return PALETA_PADRAO;
+    }
+  });
+
+  const aplicarPaletaCores = async (novaPaleta) => {
+    setPaletaCores(novaPaleta);
+    aplicarVariaveisCSS(novaPaleta);
+    localStorage.setItem('@gestor_paleta_cores', JSON.stringify(novaPaleta));
+
+    if (contaAtiva?.id && window.apiTurso) {
+      try {
+        await window.apiTurso.salvarPaletaCores({ contaId: contaAtiva.id, paletaCores: novaPaleta });
+      } catch (err) {
+        console.error('Erro ao salvar paleta de cores no banco:', err);
+      }
+    }
+  };
+
+  // Carrega a paleta salva no banco de dados quando a conta ativa muda
+  useEffect(() => {
+    if (contaAtiva?.id && window.apiTurso) {
+      window.apiTurso.carregarPaletaCores({ contaId: contaAtiva.id }).then((res) => {
+        if (res?.success && res.paletaCores) {
+          try {
+            const cores = typeof res.paletaCores === 'string' ? JSON.parse(res.paletaCores) : res.paletaCores;
+            if (cores && typeof cores === 'object') {
+              setPaletaCores(cores);
+              aplicarVariaveisCSS(cores);
+              localStorage.setItem('@gestor_paleta_cores', JSON.stringify(cores));
+            }
+          } catch (e) {
+            console.error('Erro ao fazer parse da paleta de cores:', e);
+          }
+        }
+      });
+    }
+  }, [contaAtiva?.id]);
 
   // Modais Globais
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -298,32 +487,64 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  // Carrega configurações da Caixinha ao trocar de conta
+  // Carrega configurações da Caixinha ao trocar de conta (banco + localStorage)
   useEffect(() => {
     if (contaAtiva?.id) {
-      const ativaSalva = localStorage.getItem(`@gestor_caixinha_ativa_${contaAtiva.id}`) === 'true';
-      const inicialSalvo = parseFloat(localStorage.getItem(`@gestor_caixinha_inicial_${contaAtiva.id}`)) || 0;
-      setIsCaixinhaAtiva(ativaSalva);
-      setSaldoInicialCaixinha(inicialSalvo);
+      const dbAtiva = contaAtiva.caixinha_ativa === true || contaAtiva.caixinha_ativa === 'true';
+      const dbInicial = parseFloat(contaAtiva.caixinha_saldo_inicial) || 0;
+
+      const localAtiva = localStorage.getItem(`@gestor_caixinha_ativa_${contaAtiva.id}`) === 'true';
+      const localInicial = parseFloat(localStorage.getItem(`@gestor_caixinha_inicial_${contaAtiva.id}`)) || 0;
+
+      const ativaFinal = (contaAtiva.caixinha_ativa !== undefined && contaAtiva.caixinha_ativa !== null) ? dbAtiva : localAtiva;
+      const inicialFinal = (contaAtiva.caixinha_saldo_inicial !== undefined && contaAtiva.caixinha_saldo_inicial !== null) ? dbInicial : localInicial;
+
+      setIsCaixinhaAtiva(ativaFinal);
+      setSaldoInicialCaixinha(inicialFinal);
+
+      localStorage.setItem(`@gestor_caixinha_ativa_${contaAtiva.id}`, ativaFinal ? 'true' : 'false');
+      localStorage.setItem(`@gestor_caixinha_inicial_${contaAtiva.id}`, inicialFinal.toString());
     } else {
       setIsCaixinhaAtiva(false);
       setSaldoInicialCaixinha(0);
     }
-  }, [contaAtiva?.id]);
+  }, [contaAtiva]);
 
-  const toggleCaixinha = (status) => {
+  const toggleCaixinha = async (status) => {
     const novoStatus = typeof status === 'boolean' ? status : !isCaixinhaAtiva;
     setIsCaixinhaAtiva(novoStatus);
     if (contaAtiva?.id) {
       localStorage.setItem(`@gestor_caixinha_ativa_${contaAtiva.id}`, novoStatus ? 'true' : 'false');
+      setContaAtiva((prev) => (prev ? { ...prev, caixinha_ativa: novoStatus } : prev));
+      setContas((prevContas) =>
+        prevContas.map((c) => (c.id === contaAtiva.id ? { ...c, caixinha_ativa: novoStatus } : c))
+      );
+
+      if (window.apiTurso?.salvarConfiguracaoCaixinha) {
+        await window.apiTurso.salvarConfiguracaoCaixinha({
+          contaId: contaAtiva.id,
+          caixinhaAtiva: novoStatus,
+        });
+      }
     }
   };
 
-  const atualizarSaldoInicialCaixinha = (val) => {
+  const atualizarSaldoInicialCaixinha = async (val) => {
     const num = parseFloat(val) || 0;
     setSaldoInicialCaixinha(num);
     if (contaAtiva?.id) {
       localStorage.setItem(`@gestor_caixinha_inicial_${contaAtiva.id}`, num.toString());
+      setContaAtiva((prev) => (prev ? { ...prev, caixinha_saldo_inicial: num } : prev));
+      setContas((prevContas) =>
+        prevContas.map((c) => (c.id === contaAtiva.id ? { ...c, caixinha_saldo_inicial: num } : c))
+      );
+
+      if (window.apiTurso?.salvarConfiguracaoCaixinha) {
+        await window.apiTurso.salvarConfiguracaoCaixinha({
+          contaId: contaAtiva.id,
+          caixinhaSaldoInicial: num,
+        });
+      }
     }
   };
 
@@ -342,8 +563,12 @@ export const BudgetProvider = ({ children }) => {
     }
   }, [usuarioLogado?.id, contaAtiva?.id, anoSelecionado, mesSelecionado, saldoInicialCaixinha]);
 
+  const isSubmittingTransacaoRef = useRef(false);
+
   const adicionarTransacao = async (novaTransacao) => {
     if (!usuarioLogado || !window.apiTurso) return;
+    if (isSubmittingTransacaoRef.current) return;
+    isSubmittingTransacaoRef.current = true;
 
     try {
       const res = await window.apiTurso.adicionarTransacao({
@@ -360,8 +585,11 @@ export const BudgetProvider = ({ children }) => {
         await carregarTransacoes();
         await carregarEtiquetas(usuarioLogado.id);
       }
+      return res;
     } catch (err) {
       console.error('Erro ao adicionar transação:', err);
+    } finally {
+      isSubmittingTransacaoRef.current = false;
     }
   };
 
@@ -396,6 +624,26 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
+  const importarTransacoesNubankCSV = async (transacoesList) => {
+    if (!usuarioLogado || !contaAtiva || !window.apiTurso) return { success: false, error: 'Sessão ou conta ativa inválida.' };
+    try {
+      const res = await window.apiTurso.importarTransacoesNubankCSV({
+        usuarioId: usuarioLogado.id,
+        contaId: contaAtiva.id,
+        transacoes: transacoesList,
+      });
+      if (res?.success) {
+        await carregarTransacoes();
+        await carregarEtiquetas(usuarioLogado.id);
+        await carregarCategorias(usuarioLogado.id);
+      }
+      return res;
+    } catch (err) {
+      console.error('Erro ao importar transações do Nubank:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   const adicionarCategoria = async ({ nome, cor }) => {
     if (!usuarioLogado || !window.apiTurso) return;
     try {
@@ -416,32 +664,154 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  const exportarCSV = async () => {
+  const reordenarCategorias = async (novasCategorias) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    setCategorias(novasCategorias);
+    const ordemIds = novasCategorias.map((c) => c.id).filter(Boolean);
+    try {
+      await window.apiTurso.reordenarCategorias({
+        usuarioId: usuarioLogado.id,
+        ordemIds,
+      });
+    } catch (err) {
+      console.error('Erro ao reordenar categorias:', err);
+    }
+  };
+
+  const reordenarEtiquetas = async (novasEtiquetas) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    setEtiquetaList(novasEtiquetas);
+    try {
+      await window.apiTurso.reordenarEtiquetas({
+        usuarioId: usuarioLogado.id,
+        ordemEtiquetas: novasEtiquetas,
+      });
+    } catch (err) {
+      console.error('Erro ao reordenar etiquetas:', err);
+    }
+  };
+
+  const deletarEtiqueta = async (nome) => {
+    if (!usuarioLogado || !window.apiTurso) return;
+    try {
+      await window.apiTurso.deletarEtiqueta({ usuarioId: usuarioLogado.id, nome });
+      await carregarEtiquetas(usuarioLogado.id);
+    } catch (err) {
+      console.error('Erro ao deletar etiqueta:', err);
+    }
+  };
+
+  const obterTransacoesParaExportar = async (opcaoParam, anoParam) => {
+    if (!window.apiTurso || !usuarioLogado) return { targetReceitas: [], targetDespesas: [], mesLabel: '', anoLabel: '' };
+
+    if (typeof opcaoParam === 'object' && opcaoParam !== null && opcaoParam.modo === 'intervalo') {
+      const { mesInicio, anoInicio, mesFim, anoFim } = opcaoParam;
+      const res = await window.apiTurso.carregarTransacoes({
+        usuarioId: usuarioLogado.id,
+        contaId: contaAtiva?.id,
+        mes: 'Todos',
+        ano: 'Todos',
+      });
+
+      const idxInicio = MESES_LISTA.indexOf(mesInicio) >= 0 ? MESES_LISTA.indexOf(mesInicio) : 0;
+      const idxFim = MESES_LISTA.indexOf(mesFim) >= 0 ? MESES_LISTA.indexOf(mesFim) : 11;
+      const valStart = parseInt(anoInicio, 10) * 12 + idxInicio;
+      const valEnd = parseInt(anoFim, 10) * 12 + idxFim;
+
+      const filterFn = (item) => {
+        const itemMesIdx = MESES_LISTA.indexOf(item.mes) >= 0 ? MESES_LISTA.indexOf(item.mes) : 0;
+        const itemVal = parseInt(item.ano, 10) * 12 + itemMesIdx;
+        return itemVal >= valStart && itemVal <= valEnd;
+      };
+
+      return {
+        targetReceitas: (res?.receitas || []).filter(filterFn),
+        targetDespesas: (res?.despesas || []).filter(filterFn),
+        mesLabel: `${mesInicio}/${anoInicio} a ${mesFim}/${anoFim}`,
+        anoLabel: `${anoInicio}-${anoFim}`,
+      };
+    } else {
+      let m = mesSelecionado;
+      let a = anoSelecionado;
+
+      if (typeof opcaoParam === 'object' && opcaoParam !== null) {
+        m = opcaoParam.mes || mesSelecionado;
+        a = opcaoParam.ano || anoSelecionado;
+      } else if (typeof opcaoParam === 'string') {
+        m = opcaoParam;
+        a = anoParam || anoSelecionado;
+      }
+
+      let targetReceitas = receitas || [];
+      let targetDespesas = despesas || [];
+
+      if (m === 'Todos' || m !== mesSelecionado || a !== anoSelecionado) {
+        const res = await window.apiTurso.carregarTransacoes({
+          usuarioId: usuarioLogado.id,
+          contaId: contaAtiva?.id,
+          mes: m,
+          ano: a,
+        });
+        targetReceitas = Array.isArray(res?.receitas) ? res.receitas : [];
+        targetDespesas = Array.isArray(res?.despesas) ? res.despesas : [];
+      }
+
+      return {
+        targetReceitas,
+        targetDespesas,
+        mesLabel: m,
+        anoLabel: a,
+      };
+    }
+  };
+
+  const exportarCSV = async (opcaoParam, anoParam) => {
+    const { targetReceitas, targetDespesas, mesLabel, anoLabel } = await obterTransacoesParaExportar(opcaoParam, anoParam);
     if (!window.apiTurso) return;
+
     const dadosCombinados = [
-      ...(receitas || []).map((r) => ({ ...r, tipo: 'receitas' })),
-      ...(despesas || []).map((d) => ({ ...d, tipo: 'despesas' })),
+      ...targetReceitas.map((r) => ({ ...r, tipo: 'receitas' })),
+      ...targetDespesas.map((d) => ({ ...d, tipo: 'despesas' })),
     ];
+
     return await window.apiTurso.exportarCSV({
       dados: dadosCombinados,
-      mes: mesSelecionado,
-      ano: anoSelecionado,
+      mes: mesLabel,
+      ano: anoLabel,
     });
   };
 
-  const exportarPDF = async () => {
+  const exportarPDF = async (opcaoParam, anoParam) => {
+    const { targetReceitas, targetDespesas, mesLabel, anoLabel } = await obterTransacoesParaExportar(opcaoParam, anoParam);
     if (!window.apiTurso) return;
+
+    const totRec = targetReceitas.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+    const totDesp = targetDespesas.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+    const econ = totRec - totDesp;
+
     return await window.apiTurso.exportarPDF({
-      receitasList: receitas || [],
-      despesasList: despesas || [],
+      receitasList: targetReceitas,
+      despesasList: targetDespesas,
       categorias: categorias || [],
-      mes: mesSelecionado,
-      ano: anoSelecionado,
-      totalReceitas,
-      totalDespesas,
-      economia,
+      mes: mesLabel,
+      ano: anoLabel,
+      totalReceitas: totRec,
+      totalDespesas: totDesp,
+      economia: econ,
       usuarioNome: usuarioLogado?.nome || '',
     });
+  };
+
+  const excluirContaUsuario = async ({ confirmacaoText }) => {
+    if (!usuarioLogado?.id || !window.apiTurso) return { success: false, error: 'Usuário não identificado.' };
+    const res = await window.apiTurso.excluirContaUsuario({
+      usuarioId: usuarioLogado.id,
+      confirmacaoText,
+    });
+    if (res?.success) {
+      await logout();
+    }
+    return res;
   };
 
   const totalReceitas = (receitas || []).reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
@@ -490,10 +860,15 @@ export const BudgetProvider = ({ children }) => {
         adicionarTransacao,
         editarTransacao,
         deletarTransacao,
+        importarTransacoesNubankCSV,
         adicionarCategoria,
         deletarCategoria,
+        reordenarCategorias,
+        reordenarEtiquetas,
+        deletarEtiqueta,
         exportarCSV,
         exportarPDF,
+        excluirContaUsuario,
         ANOS_LISTA,
         MESES_LISTA,
         isCaixinhaAtiva,
@@ -506,6 +881,9 @@ export const BudgetProvider = ({ children }) => {
         setModoCaixinhaVisao,
         horizontePrevisao,
         setHorizontePrevisao,
+        paletaCores,
+        aplicarPaletaCores,
+        PALETAS_PREDEFINIDAS,
       }}
     >
       {children}

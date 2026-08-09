@@ -18,7 +18,47 @@ export default function TransactionTable() {
     setMesSelecionado,
     setAnoSelecionado,
     mesSelecionado,
+    categorias = [],
   } = useBudget();
+
+  const getCorCategoria = (nomeCat) => {
+    if (!nomeCat) return '#737373';
+    const cat = (categorias || []).find((c) => c?.nome?.toLowerCase() === nomeCat.toLowerCase());
+    return cat?.cor || '#fb8500';
+  };
+
+  const renderCategoriaTag = (nomeCat) => {
+    if (!nomeCat) return <span style={{ color: 'var(--text-secondary, #aaaaaa)' }}>—</span>;
+    const corCat = getCorCategoria(nomeCat);
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+        <span
+          style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: corCat,
+            display: 'inline-block',
+            boxShadow: `0 0 6px ${corCat}aa`,
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: '500' }}>{nomeCat}</span>
+      </div>
+    );
+  };
+
+  const formatarDisplayParcela = (parcelaStr, ehFixa) => {
+    if (ehFixa === 1 || parcelaStr === 'Fixa') return 'Fixa';
+    if (!parcelaStr || parcelaStr === '1/1') return 'À vista';
+    if (typeof parcelaStr === 'string' && parcelaStr.includes('/')) {
+      const [num, total] = parcelaStr.split('/');
+      if (total && total !== '1') {
+        return `${num} de ${total}`;
+      }
+    }
+    return parcelaStr;
+  };
 
   const [buscaTexto, setBuscaTexto] = useState('');
   const [ordem, setOrdem] = useState('recente');
@@ -247,20 +287,26 @@ export default function TransactionTable() {
   return (
     <div
       style={{
-        backgroundColor: '#545454',
+        backgroundColor: 'var(--card-bg, #545454)',
         borderRadius: '16px',
-        padding: '20px',
+        padding: '14px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '12px',
         flex: 1,
+        width: '100%',
+        minWidth: 0,
+        height: '540px',
+        maxHeight: '540px',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
       }}
     >
       {/* Topo: Alternador de Abas + Campo de Busca + Botão (+) + Totalizador */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        
+
         {/* As 2 Abas Alternadoras */}
-        <div style={{ display: 'flex', gap: '6px', backgroundColor: '#3e3e3e', padding: '4px', borderRadius: '24px' }}>
+        <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '4px', borderRadius: '24px' }}>
           <button
             type="button"
             onClick={() => setAbaAtiva('receitas')}
@@ -271,8 +317,9 @@ export default function TransactionTable() {
               cursor: 'pointer',
               fontWeight: 'bold',
               fontSize: '14px',
-              backgroundColor: abaAtiva === 'receitas' ? '#666666' : 'transparent',
-              color: abaAtiva === 'receitas' ? '#ffe192' : '#aaaaaa',
+              backgroundColor: abaAtiva === 'receitas' ? 'var(--accent-color, #ffe192)' : 'transparent',
+              color: abaAtiva === 'receitas' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
+              boxShadow: abaAtiva === 'receitas' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
               transition: 'all 0.2s',
             }}
           >
@@ -289,8 +336,9 @@ export default function TransactionTable() {
               cursor: 'pointer',
               fontWeight: 'bold',
               fontSize: '14px',
-              backgroundColor: abaAtiva === 'despesas' ? '#666666' : 'transparent',
-              color: abaAtiva === 'despesas' ? '#ffe192' : '#aaaaaa',
+              backgroundColor: abaAtiva === 'despesas' ? 'var(--accent-color, #ffe192)' : 'transparent',
+              color: abaAtiva === 'despesas' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
+              boxShadow: abaAtiva === 'despesas' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
               transition: 'all 0.2s',
             }}
           >
@@ -310,9 +358,9 @@ export default function TransactionTable() {
               style={{
                 padding: '8px 30px 8px 14px',
                 borderRadius: '20px',
-                border: '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffffff',
+                border: '1px solid var(--border-color, #737373)',
+                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                color: 'var(--text-primary, #ffffff)',
                 fontSize: '13px',
                 outline: 'none',
                 width: '150px',
@@ -328,7 +376,7 @@ export default function TransactionTable() {
                   right: '10px',
                   background: 'none',
                   border: 'none',
-                  color: '#aaaaaa',
+                  color: 'var(--text-secondary, #aaaaaa)',
                   cursor: 'pointer',
                   fontSize: '14px',
                 }}
@@ -347,9 +395,9 @@ export default function TransactionTable() {
               style={{
                 padding: '8px 14px',
                 borderRadius: '20px',
-                border: isOrdemOpen ? '1px solid #ffe192' : '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffe192',
+                border: isOrdemOpen ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
+                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                color: 'var(--accent-color, #ffe192)',
                 fontWeight: 'bold',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -362,7 +410,7 @@ export default function TransactionTable() {
               }}
             >
               <span>{itemOrdemAtual.label}</span>
-              <span style={{ fontSize: '10px', color: '#ffe192' }}>{isOrdemOpen ? '▲' : '▼'}</span>
+              <span style={{ fontSize: '10px', color: 'var(--accent-color, #ffe192)' }}>{isOrdemOpen ? '▲' : '▼'}</span>
             </button>
 
             {isOrdemOpen && (
@@ -372,8 +420,8 @@ export default function TransactionTable() {
                   top: 'calc(100% + 6px)',
                   right: 0,
                   zIndex: 200,
-                  backgroundColor: '#2e2e2e',
-                  border: '1px solid #ffe192',
+                  backgroundColor: 'var(--surface-bg, #2e2e2e)',
+                  border: '1px solid var(--accent-color, #ffe192)',
                   borderRadius: '14px',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
                   width: '185px',
@@ -398,9 +446,9 @@ export default function TransactionTable() {
                         backgroundColor: isSelected
                           ? 'rgba(255, 225, 146, 0.2)'
                           : isHovered
-                          ? 'rgba(255, 225, 146, 0.1)'
-                          : 'transparent',
-                        color: isSelected ? '#ffe192' : '#ffffff',
+                            ? 'rgba(255, 225, 146, 0.1)'
+                            : 'transparent',
+                        color: isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                         fontSize: '12px',
                         fontWeight: isSelected ? 'bold' : 'normal',
                         display: 'flex',
@@ -410,7 +458,7 @@ export default function TransactionTable() {
                       }}
                     >
                       <span>{op.label}</span>
-                      {isSelected && <span style={{ color: '#ffe192', fontSize: '12px' }}>✓</span>}
+                      {isSelected && <span style={{ color: 'var(--accent-color, #ffe192)', fontSize: '12px' }}>✓</span>}
                     </div>
                   );
                 })}
@@ -428,8 +476,8 @@ export default function TransactionTable() {
               height: '36px',
               borderRadius: '50%',
               border: 'none',
-              backgroundColor: '#666666',
-              color: '#ffe192',
+              backgroundColor: 'var(--surface-bg, #3e3e3e)',
+              color: 'var(--accent-color, #ffe192)',
               fontWeight: 'bold',
               cursor: 'pointer',
               fontSize: '20px',
@@ -441,7 +489,7 @@ export default function TransactionTable() {
           >
             +
           </button>
-          
+
           {/* Totalizador (Somado no 'Todos' vs Restante para gastar no Mês Específico) */}
           <div
             title={
@@ -450,10 +498,10 @@ export default function TransactionTable() {
                 : (abaAtiva === 'despesas' ? 'Saldo restante disponível para gastar este mês (Receitas - Despesas)' : 'Total de receitas deste mês')
             }
             style={{
-              backgroundColor: '#666666',
+              backgroundColor: 'var(--surface-bg, #3e3e3e)',
               padding: '8px 20px',
               borderRadius: '20px',
-              color: mesSelecionado !== 'Todos' && abaAtiva === 'despesas' && (totalReceitas - totalDespesas) < 0 ? '#ff8585' : '#ffe192',
+              color: mesSelecionado !== 'Todos' && abaAtiva === 'despesas' && (totalReceitas - totalDespesas) < 0 ? '#ff8585' : 'var(--accent-color, #ffe192)',
               fontWeight: 'bold',
               fontSize: '16px',
             }}
@@ -468,25 +516,25 @@ export default function TransactionTable() {
       </div>
 
       {/* Tabela de Lançamentos */}
-      <div style={{ overflowY: 'auto', maxHeight: '420px', borderRadius: '8px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ffffff', textAlign: 'left', fontSize: '13px' }}>
+      <div style={{ overflowY: 'auto', height: '455px', maxHeight: '455px', borderRadius: '8px' }}>
+        <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', color: 'var(--text-primary, #ffffff)', textAlign: 'left', fontSize: '13px' }}>
           <thead>
-            <tr style={{ backgroundColor: '#666666', color: '#ffe192' }}>
-              <th style={{ padding: '12px 14px', borderTopLeftRadius: '6px' }}>Data</th>
-              <th style={{ padding: '12px 14px' }}>{labelColunaNome}</th>
-              <th style={{ padding: '12px 14px' }}>Classificação</th>
-              <th style={{ padding: '12px 14px' }}>Etiqueta</th>
-              <th style={{ padding: '12px 14px' }}>
+            <tr style={{ backgroundColor: 'var(--header-bg, #666666)', color: 'var(--accent-color, #ffe192)' }}>
+              <th style={{ padding: '10px 12px', width: '110px', borderTopLeftRadius: '6px', whiteSpace: 'nowrap' }}>Data</th>
+              <th style={{ padding: '10px 12px' }}>{labelColunaNome}</th>
+              <th style={{ padding: '10px 12px', width: '120px' }}>Classificação</th>
+              <th style={{ padding: '10px 12px', width: '110px' }}>Etiqueta</th>
+              <th style={{ padding: '10px 12px', width: '130px' }}>
                 {abaAtiva === 'receitas' ? 'Recorrência' : 'Num. de Parcelas'}
               </th>
-              <th style={{ padding: '12px 14px' }}>Valor</th>
-              <th style={{ padding: '12px 14px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
+              <th style={{ padding: '10px 12px', width: '120px' }}>Valor</th>
+              <th style={{ padding: '10px 12px', width: '120px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {transacoesFiltradasPelaBusca.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: '#cccccc' }}>
+                <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary, #cccccc)' }}>
                   {buscaTexto
                     ? `Nenhum lançamento encontrado para "${buscaTexto}".`
                     : 'Nenhuma transação cadastrada para este mês/ano.'}
@@ -521,25 +569,26 @@ export default function TransactionTable() {
                       key={item.id}
                       onClick={() => setItemParaDetalhes({ ...item, tipo: abaAtiva })}
                       style={{
-                        backgroundColor: index % 2 === 0 ? '#5d5d5d' : '#525252',
-                        borderBottom: '1px solid #666666',
+                        backgroundColor: index % 2 === 0 ? 'var(--surface-bg, #5d5d5d)' : 'var(--card-bg, #525252)',
+                        borderBottom: '1px solid var(--border-color, #666666)',
                         cursor: 'pointer',
                         transition: 'background-color 0.15s',
+                        color: 'var(--text-primary, #ffffff)',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#6e6e6e')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#5d5d5d' : '#525252')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #6e6e6e)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'var(--surface-bg, #5d5d5d)' : 'var(--card-bg, #525252)')}
                     >
                       {/* Coluna Data / Hora */}
-                      <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: '500', fontSize: '12px' }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--accent-color, #ffe192)', fontWeight: '500', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         {formatDataHora(item.data_transacao, item.mes)}
                       </td>
-                      <td style={{ padding: '12px 14px', fontWeight: '500' }}>{item.nome}</td>
-                      <td style={{ padding: '12px 14px', color: '#dddddd' }}>{item.classificacao}</td>
-                      <td style={{ padding: '12px 14px', color: '#dddddd' }}>{item.etiqueta}</td>
-                      <td style={{ padding: '12px 14px', color: '#dddddd' }}>
-                        {item.eh_fixa === 1 ? 'Fixa' : item.parcelas}
+                      <td style={{ padding: '9px 12px', fontWeight: '500' }}>{item.nome}</td>
+                      <td style={{ padding: '9px 12px' }}>{renderCategoriaTag(item.classificacao)}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary, #dddddd)' }}>{item.etiqueta}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary, #dddddd)', whiteSpace: 'nowrap' }}>
+                        {formatarDisplayParcela(item.parcelas, item.eh_fixa)}
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: 'bold' }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
                         R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
@@ -553,14 +602,15 @@ export default function TransactionTable() {
                             }}
                             title="Ver detalhes e editar"
                             style={{
-                              backgroundColor: '#737373',
-                              border: 'none',
+                              backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                              border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
                               borderRadius: '12px',
-                              color: '#ffffff',
+                              color: 'var(--accent-color, #ffe192)',
                               cursor: 'pointer',
                               padding: '4px 12px',
                               fontSize: '12px',
                               fontWeight: 'bold',
+                              transition: 'all 0.15s',
                             }}
                           >
                             Detalhes
@@ -613,85 +663,130 @@ export default function TransactionTable() {
                 const primeiroItem = itensOrdenados[0];
                 const ultimoItem = itensOrdenados[itensOrdenados.length - 1];
 
+                const countItens = grupo.itens.length;
+                const valorTotalGrupo = grupo.itens.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+                const valorUnitario = Number(primeiroItem?.valor || 0);
+
                 const dataInicio = formatDataHora(primeiroItem.data_transacao, primeiroItem.mes);
                 const dataFim = formatDataHora(ultimoItem.data_transacao, ultimoItem.mes);
                 const dataDisplay = dataInicio === dataFim ? dataInicio : `${dataInicio} a ${dataFim}`;
 
+                const isRealParceladoGroup = !isRecorrenteGroup && (
+                  grupo.totalParcelas > 1 || grupo.itens.some((i) => i.parcelas && i.parcelas !== '1/1')
+                );
+
                 let parcelasRange = 'Fixa';
-                if (!isRecorrenteGroup) {
+                if (isRecorrenteGroup) {
+                  parcelasRange = 'Fixa';
+                } else if (!isRealParceladoGroup) {
+                  parcelasRange = 'À vista';
+                } else {
                   const minP = parseInt(primeiroItem.parcelas.split('/')[0], 10) || 1;
                   const maxP = parseInt(ultimoItem.parcelas.split('/')[0], 10) || 1;
-                  parcelasRange = minP === maxP ? `${minP}/${grupo.totalParcelas}` : `${minP}/${grupo.totalParcelas} a ${maxP}/${grupo.totalParcelas}`;
+                  const totalP = grupo.totalParcelas || 1;
+
+                  if (minP === maxP) {
+                    parcelasRange = `${minP} de ${totalP}`;
+                  } else {
+                    parcelasRange = `${minP}/${maxP} de ${totalP}`;
+                  }
                 }
 
-                const valorTotalGrupo = grupo.itens.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
-                const valorUnitario = Number(primeiroItem.valor || 0);
-                const countItens = grupo.itens.length;
+                let badgeLabel = `🛒 ${countItens} compras agrupadas`;
+                if (isRecorrenteGroup) {
+                  badgeLabel = `🔄 ${countItens} meses recorrentes`;
+                } else if (isRealParceladoGroup) {
+                  badgeLabel = `📦 ${countItens} parcelas unificadas`;
+                } else if (abaAtiva === 'receitas') {
+                  badgeLabel = `💰 ${countItens} receitas agrupadas`;
+                }
+
+                let subpanelTitle = `📋 Compras agrupadas de "${grupo.nome}":`;
+                if (isRecorrenteGroup) {
+                  subpanelTitle = `📋 Gastos recorrentes de "${grupo.nome}":`;
+                } else if (isRealParceladoGroup) {
+                  subpanelTitle = `📋 Parcelas de "${grupo.nome}":`;
+                } else if (abaAtiva === 'receitas') {
+                  subpanelTitle = `📋 Receitas agrupadas de "${grupo.nome}":`;
+                }
+
+                let toggleText = `▼ Ver ${countItens} compras`;
+                if (isRecorrenteGroup) {
+                  toggleText = `▼ Ver ${countItens} meses`;
+                } else if (isRealParceladoGroup) {
+                  toggleText = `▼ Ver ${countItens} parcelas`;
+                } else if (abaAtiva === 'receitas') {
+                  toggleText = `▼ Ver ${countItens} receitas`;
+                }
 
                 return (
                   <React.Fragment key={grupo.groupKey}>
                     <tr
                       onClick={(e) => toggleGroup(grupo.groupKey, e)}
                       style={{
-                        backgroundColor: isExpanded ? '#4a4a4a' : (index % 2 === 0 ? '#5d5d5d' : '#525252'),
-                        borderBottom: isExpanded ? 'none' : '1px solid #666666',
-                        borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid #ffe192',
+                        backgroundColor: isExpanded ? 'var(--header-bg, #3e3e3e)' : (index % 2 === 0 ? 'var(--surface-bg, #3e3e3e)' : 'var(--card-bg, #545454)'),
+                        borderBottom: isExpanded ? 'none' : '1px solid var(--border-color, #666666)',
+                        borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid var(--accent-color, #ffe192)',
                         cursor: 'pointer',
                         transition: 'all 0.15s',
+                        color: 'var(--text-primary, #ffffff)',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#6e6e6e')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isExpanded ? '#4a4a4a' : (index % 2 === 0 ? '#5d5d5d' : '#525252'))}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.08))')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isExpanded ? 'var(--header-bg, #3e3e3e)' : (index % 2 === 0 ? 'var(--surface-bg, #3e3e3e)' : 'var(--card-bg, #545454)'))}
                     >
-                      <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: '500', fontSize: '12px' }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--accent-color, #ffe192)', fontWeight: '500', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         {dataDisplay}
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 'bold' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', color: '#ffe192' }}>{isExpanded ? '▲' : '▼'}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)' }}>{isExpanded ? '▲' : '▼'}</span>
                           <span>{grupo.nome}</span>
                           <span
                             style={{
                               fontSize: '10px',
-                              backgroundColor: isRecorrenteGroup ? '#2a9d8f' : '#ffe192',
-                              color: isRecorrenteGroup ? '#ffffff' : '#333333',
+                              backgroundColor: isRecorrenteGroup ? '#2a9d8f' : (isRealParceladoGroup ? '#e76f51' : 'var(--accent-color, #ffe192)'),
+                              color: (isRecorrenteGroup || isRealParceladoGroup) ? '#ffffff' : 'var(--accent-text, #333333)',
                               padding: '2px 8px',
                               borderRadius: '10px',
                               fontWeight: 'bold',
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {isRecorrenteGroup ? `🔄 ${countItens} meses recorrentes` : `📦 ${countItens} parcelas unificadas`}
+                            {badgeLabel}
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#dddddd' }}>{grupo.classificacao}</td>
-                      <td style={{ padding: '12px 14px', color: '#dddddd' }}>{grupo.etiqueta}</td>
-                      <td style={{ padding: '12px 14px', color: isRecorrenteGroup ? '#2a9d8f' : '#ffe192', fontWeight: 'bold' }}>
+                      <td style={{ padding: '12px 14px' }}>{renderCategoriaTag(grupo.classificacao)}</td>
+                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary, #dddddd)' }}>{grupo.etiqueta}</td>
+                      <td style={{ padding: '12px 14px', color: isRecorrenteGroup ? '#2a9d8f' : 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
                         {parcelasRange}
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#ffe192', fontWeight: 'bold' }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
                         R$ {valorTotalGrupo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        <div style={{ fontSize: '10px', color: '#aaaaaa', fontWeight: 'normal' }}>
+                        <div style={{ fontSize: '10px', color: 'var(--text-secondary, #aaaaaa)', fontWeight: 'normal' }}>
                           ({countItens}x de R$ {valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                         </div>
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <button
                           type="button"
-                          onClick={(e) => toggleGroup(grupo.groupKey, e)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleGroup(grupo.groupKey, e);
+                          }}
                           style={{
-                            backgroundColor: isExpanded ? '#ffe192' : '#737373',
-                            color: isExpanded ? '#333333' : '#ffe192',
-                            border: '1px solid #ffe192',
-                            borderRadius: '12px',
-                            cursor: 'pointer',
-                            padding: '4px 12px',
+                            backgroundColor: isExpanded ? 'var(--accent-color, #ffe192)' : 'var(--surface-bg, #3e3e3e)',
+                            color: isExpanded ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                            border: '1px solid var(--border-color, #737373)',
+                            borderRadius: '10px',
+                            padding: '6px 14px',
                             fontSize: '12px',
                             fontWeight: 'bold',
-                            transition: 'all 0.2s',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
                           }}
                         >
-                          {isExpanded ? '▲ Ocultar' : (isRecorrenteGroup ? `▼ Ver ${countItens} meses` : `▼ Ver ${countItens} parcelas`)}
+                          {isExpanded ? '▲ Ocultar' : toggleText}
                         </button>
                       </td>
                     </tr>
@@ -699,24 +794,24 @@ export default function TransactionTable() {
                     {/* Sub-Linha Dropdown com Todos os Registros Individuais */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan="7" style={{ padding: '0 0 12px 0', backgroundColor: '#3e3e3e', borderBottom: '1px solid #666666' }}>
+                        <td colSpan="7" style={{ padding: '0 0 12px 0', backgroundColor: 'var(--card-bg, #3e3e3e)', borderBottom: '1px solid var(--border-color, #666666)' }}>
                           <div
                             style={{
                               padding: '12px 16px',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '6px',
-                              borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid #ffe192',
+                              borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid var(--accent-color, #ffe192)',
                               marginLeft: '12px',
                               marginRight: '12px',
                               marginTop: '8px',
-                              backgroundColor: '#2e2e2e',
+                              backgroundColor: 'var(--surface-bg, #2e2e2e)',
                               borderRadius: '12px',
                               boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.4)',
                             }}
                           >
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: isRecorrenteGroup ? '#2a9d8f' : '#ffe192', textTransform: 'uppercase', marginBottom: '4px' }}>
-                              {isRecorrenteGroup ? `📋 Gastos recorrentes unificados de "${grupo.nome}":` : `📋 Parcelas unificadas de "${grupo.nome}":`}
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: isRecorrenteGroup ? '#2a9d8f' : 'var(--accent-color, #ffe192)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                              {subpanelTitle}
                             </div>
                             {itensOrdenados.map((subItem) => (
                               <div
@@ -727,42 +822,48 @@ export default function TransactionTable() {
                                   alignItems: 'center',
                                   justifyContent: 'space-between',
                                   padding: '8px 14px',
-                                  backgroundColor: '#3e3e3e',
+                                  backgroundColor: 'var(--card-bg, #3e3e3e)',
                                   borderRadius: '8px',
-                                  border: '1px solid #545454',
+                                  border: '1px solid var(--border-color, #545454)',
                                   cursor: 'pointer',
                                   fontSize: '12px',
                                   transition: 'background-color 0.15s',
                                 }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#505050')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#3e3e3e')}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #505050)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--card-bg, #3e3e3e)')}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                  <span style={{ color: '#ffe192', fontWeight: 'bold', minWidth: '45px' }}>
+                                  <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', minWidth: '45px' }}>
                                     {formatDataHora(subItem.data_transacao, subItem.mes)}
                                   </span>
-                                  <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+                                  <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: 'bold' }}>
                                     {subItem.nome}
                                   </span>
                                   <span
                                     style={{
-                                      color: isRecorrenteGroup ? '#ffffff' : '#ffe192',
-                                      backgroundColor: isRecorrenteGroup ? '#2a9d8f' : '#545454',
+                                      color: isRecorrenteGroup ? '#ffffff' : 'var(--accent-color, #ffe192)',
+                                      backgroundColor: isRecorrenteGroup ? '#2a9d8f' : 'var(--surface-bg, #3e3e3e)',
+                                      border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
                                       padding: '2px 8px',
                                       borderRadius: '10px',
                                       fontSize: '11px',
                                       fontWeight: 'bold',
                                     }}
                                   >
-                                    {isRecorrenteGroup ? `Recorrente (${subItem.mes || 'Mês'})` : `Parcela ${subItem.parcelas}`}
+                                    {isRecorrenteGroup
+                                      ? `Recorrente (${subItem.mes || 'Mês'})`
+                                      : isRealParceladoGroup
+                                        ? formatarDisplayParcela(subItem.parcelas, subItem.eh_fixa)
+                                        : (abaAtiva === 'receitas' ? 'Receita' : 'Compra')}
                                   </span>
-                                  <span style={{ color: '#cccccc' }}>
-                                    {subItem.classificacao} • {subItem.etiqueta}
-                                  </span>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary, #cccccc)' }}>
+                                    {renderCategoriaTag(subItem.classificacao)}
+                                    <span>• {subItem.etiqueta}</span>
+                                  </div>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <span style={{ color: '#ffe192', fontWeight: 'bold', fontSize: '13px' }}>
+                                  <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', fontSize: '13px' }}>
                                     R$ {Number(subItem.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </span>
 
@@ -773,14 +874,15 @@ export default function TransactionTable() {
                                       setItemParaDetalhes({ ...subItem, tipo: abaAtiva });
                                     }}
                                     style={{
-                                      backgroundColor: '#666666',
-                                      border: 'none',
+                                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                                      border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
                                       borderRadius: '8px',
-                                      color: '#ffffff',
+                                      color: 'var(--accent-color, #ffe192)',
                                       cursor: 'pointer',
                                       padding: '3px 10px',
                                       fontSize: '11px',
                                       fontWeight: 'bold',
+                                      transition: 'all 0.15s',
                                     }}
                                   >
                                     Detalhes

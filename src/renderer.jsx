@@ -91,23 +91,24 @@ const MainLayout = () => {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
-        padding: '24px',
+        gap: '12px',
+        padding: '14px 18px',
         minHeight: '100vh',
-        backgroundColor: '#3a3a3a',
-        color: '#ffffff',
+        backgroundColor: 'var(--bg-primary, #3a3a3a)',
+        color: 'var(--text-primary, #ffffff)',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         boxSizing: 'border-box',
+        zoom: '0.94',
       }}
     >
       {/* Topo do App: Logo Centralizada na Moldura + Anos (Esquerda) + Perfil (Direita) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Logo com Emblema Perfeitamente Centralizado e Ampliado na Moldura */}
           <div
             style={{
-              width: '44px',
-              height: '44px',
+              width: '40px',
+              height: '40px',
               borderRadius: '50%',
               overflow: 'hidden',
               border: '2px solid #ffe192',
@@ -120,7 +121,7 @@ const MainLayout = () => {
           >
             <img
               src={appIcon}
-              alt="Gestor de Orçamento"
+              alt="Simple Finances"
               style={{
                 width: '100%',
                 height: '100%',
@@ -142,22 +143,26 @@ const MainLayout = () => {
       <div
         style={{
           display: 'flex',
-          gap: '20px',
+          gap: '16px',
           flex: 1,
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
+          alignItems: 'stretch',
+          flexWrap: 'nowrap',
+          width: '100%',
         }}
       >
         {/* Coluna da Esquerda: Tabela de Lançamentos ou Dashboard da Caixinha */}
-        {anoSelecionado === 'caixinha' ? <CaixinhaDashboard /> : <TransactionTable />}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {anoSelecionado === 'caixinha' ? <CaixinhaDashboard /> : <TransactionTable />}
+        </div>
 
         {/* Coluna da Direita: Gráfico e Cards */}
         <div
           style={{
-            width: '320px',
+            width: '310px',
+            flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
+            gap: '14px',
             alignItems: 'center',
           }}
         >

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 import { apiService } from '../services/api';
 import iconLixeira from '../../images/lixeira-de-reciclagem.png';
+import { parseNubankCsv } from '../utils/nubankCsvParser';
 
 export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPDF, onOpenCreateAccount }) {
   const [activeTab, setActiveTab] = useState('perfil');
@@ -21,9 +22,105 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
     atualizarSaldoInicialCaixinha,
     saldoCaixinhaAcumulado,
     isComercial,
+    mesSelecionado,
+    anoSelecionado,
+    excluirContaUsuario,
+    paletaCores,
+    aplicarPaletaCores,
+    PALETAS_PREDEFINIDAS,
+    receitas = [],
+    despesas = [],
+    transacoesTabela = [],
+    categorias = [],
+    importarTransacoesNubankCSV,
   } = useBudget();
 
-  const isAdmin = usuarioLogado?.funcao === 'admin' || usuarioLogado?.email?.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
+  const [customCores, setCustomCores] = useState(paletaCores || {});
+  const [salvoPaletaFeedback, setSalvoPaletaFeedback] = useState(false);
+
+  // Estados para Importação de CSV do Nubank
+  const [csvFile, setCsvFile] = useState(null);
+  const [parsedCsvResult, setParsedCsvResult] = useState(null);
+  const [categoriaImportacao, setCategoriaImportacao] = useState('Nubank');
+  const [importandoNubank, setImportandoNubank] = useState(false);
+  const [importFeedbackNubank, setImportFeedbackNubank] = useState(null);
+
+  const handleCsvFileUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setCsvFile(file);
+    setImportFeedbackNubank(null);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const allExisting = [...receitas, ...despesas, ...transacoesTabela];
+      const res = parseNubankCsv(text, allExisting);
+      setParsedCsvResult(res);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmarImportacaoNubank = async () => {
+    if (!parsedCsvResult?.success || !parsedCsvResult.itens) return;
+    setImportandoNubank(true);
+    setImportFeedbackNubank(null);
+
+    const itensParaEnviar = parsedCsvResult.itens.map((item) => ({
+      ...item,
+      classificacao: categoriaImportacao || 'Nubank',
+    }));
+
+    const res = await importarTransacoesNubankCSV(itensParaEnviar);
+    setImportandoNubank(false);
+
+    if (res?.success) {
+      setImportFeedbackNubank({
+        tipo: 'sucesso',
+        mensagem: `🎉 Sucesso! ${res.inseridosCount || parsedCsvResult.qtdNovos} lançamentos foram importados para a conta "${contaAtiva?.nome || 'ativa'}".`,
+      });
+      setCsvFile(null);
+      setParsedCsvResult(null);
+    } else {
+      setImportFeedbackNubank({
+        tipo: 'erro',
+        mensagem: res?.error || 'Erro ao importar transações.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (paletaCores) {
+      setCustomCores(paletaCores);
+    }
+  }, [paletaCores, isOpen]);
+
+  const [exportMes, setExportMes] = useState(mesSelecionado || 'Jan');
+  const [exportAno, setExportAno] = useState(anoSelecionado || '2026');
+
+  // Modos de Filtro de Período de Exportação
+  const [modoExportacao, setModoExportacao] = useState('mes_a_mes'); // 'mes_a_mes', 'ano_a_ano', 'intervalo'
+  const [intervaloMesInicio, setIntervaloMesInicio] = useState('Jan');
+  const [intervaloAnoInicio, setIntervaloAnoInicio] = useState(anoSelecionado || '2026');
+  const [intervaloMesFim, setIntervaloMesFim] = useState('Dez');
+  const [intervaloAnoFim, setIntervaloAnoFim] = useState(anoSelecionado || '2026');
+
+  // Estados da Exclusão Permanente de Perfil/Conta
+  const [isConfirmExcluirContaOpen, setIsConfirmExcluirContaOpen] = useState(false);
+  const [confirmTextoInput, setConfirmTextoInput] = useState('');
+  const [erroExcluirConta, setErroExcluirConta] = useState('');
+  const [carregandoExclusao, setCarregandoExclusao] = useState(false);
+
+  useEffect(() => {
+    if (mesSelecionado) setExportMes(mesSelecionado);
+    if (anoSelecionado) {
+      setExportAno(anoSelecionado);
+      setIntervaloAnoInicio(anoSelecionado);
+      setIntervaloAnoFim(anoSelecionado);
+    }
+  }, [mesSelecionado, anoSelecionado]);
+
+  const isAdmin = usuarioLogado?.funcao === 'admin';
 
   const [listaUsuariosAdmin, setListaUsuariosAdmin] = useState([]);
   const [carregandoUsuarios, setCarregandoUsuarios] = useState(false);
@@ -53,22 +150,39 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
     }
   }, [isOpen, activeTab]);
 
-  const [valorInicialStr, setValorInicialStr] = useState(
-    saldoInicialCaixinha ? String(saldoInicialCaixinha) : ''
+  const formatarCurrencyValue = (valNumerico) => {
+    if (!valNumerico && valNumerico !== 0) return '';
+    return Number(valNumerico).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const [valorInicialInput, setValorInicialInput] = useState(
+    saldoInicialCaixinha ? formatarCurrencyValue(saldoInicialCaixinha) : ''
   );
+  const [salvoFeedback, setSalvoFeedback] = useState(false);
 
   useEffect(() => {
-    setValorInicialStr(saldoInicialCaixinha ? String(saldoInicialCaixinha) : '');
+    setValorInicialInput(saldoInicialCaixinha ? formatarCurrencyValue(saldoInicialCaixinha) : '');
   }, [saldoInicialCaixinha]);
 
-  const handleValorInicialChange = (valStr) => {
-    setValorInicialStr(valStr);
-    if (valStr === '' || valStr === '-') {
-      atualizarSaldoInicialCaixinha(0);
-    } else {
-      const num = parseFloat(valStr);
-      atualizarSaldoInicialCaixinha(isNaN(num) ? 0 : num);
+  const handleValorInicialChange = (e) => {
+    const apenasDigitos = e.target.value.replace(/\D/g, '');
+    if (!apenasDigitos) {
+      setValorInicialInput('');
+      return;
     }
+    const numero = Number(apenasDigitos) / 100;
+    setValorInicialInput(formatarCurrencyValue(numero));
+  };
+
+  const handleSalvarSaldoInicial = () => {
+    const apenasDigitos = (valorInicialInput || '').replace(/\D/g, '');
+    const num = apenasDigitos ? Number(apenasDigitos) / 100 : 0;
+    atualizarSaldoInicialCaixinha(num);
+    setSalvoFeedback(true);
+    setTimeout(() => setSalvoFeedback(false), 2500);
   };
 
   if (!isOpen) return null;
@@ -91,32 +205,34 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
     >
       <div
         style={{
-          backgroundColor: '#545454',
+          backgroundColor: 'var(--card-bg, #545454)',
           borderRadius: '24px',
-          width: '90%',
-          maxWidth: '720px',
-          height: '520px',
+          width: '94%',
+          maxWidth: '1140px',
+          height: '760px',
+          maxHeight: '88vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
-          border: '1px solid #666666',
+          border: '1px solid var(--border-color, #666666)',
           overflow: 'hidden',
+          color: 'var(--text-primary, #ffffff)',
         }}
       >
         {/* Cabeçalho do Modal */}
         <div
           style={{
             padding: '20px 24px',
-            borderBottom: '1px solid #666666',
+            borderBottom: '1px solid var(--border-color, #666666)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            backgroundColor: '#444444',
+            backgroundColor: 'var(--header-bg, #444444)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '20px' }}>⚙️</span>
-            <h3 style={{ margin: 0, color: '#ffffff', fontSize: '20px', fontWeight: 'bold' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '20px', fontWeight: 'bold' }}>
               Configurações
             </h3>
           </div>
@@ -125,7 +241,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
             style={{
               background: 'none',
               border: 'none',
-              color: '#aaaaaa',
+              color: 'var(--text-secondary, #aaaaaa)',
               fontSize: '20px',
               cursor: 'pointer',
               padding: '4px 8px',
@@ -133,11 +249,11 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               transition: 'color 0.2s, background-color 0.2s',
             }}
             onMouseEnter={(e) => {
-              e.target.style.color = '#ffffff';
-              e.target.style.backgroundColor = '#555555';
+              e.target.style.color = 'var(--text-primary, #ffffff)';
+              e.target.style.backgroundColor = 'var(--surface-hover, #555555)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.color = '#aaaaaa';
+              e.target.style.color = 'var(--text-secondary, #aaaaaa)';
               e.target.style.backgroundColor = 'transparent';
             }}
           >
@@ -151,8 +267,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
           <div
             style={{
               width: '220px',
-              backgroundColor: '#3e3e3e',
-              borderRight: '1px solid #666666',
+              backgroundColor: 'var(--surface-bg, #3e3e3e)',
+              borderRight: '1px solid var(--border-color, #666666)',
               padding: '16px 12px',
               display: 'flex',
               flexDirection: 'column',
@@ -163,7 +279,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               style={{
                 fontSize: '11px',
                 fontWeight: 'bold',
-                color: '#ffe192',
+                color: 'var(--accent-color, #ffe192)',
                 textTransform: 'uppercase',
                 padding: '4px 12px',
                 marginBottom: '4px',
@@ -185,8 +301,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 padding: '12px 14px',
                 borderRadius: '12px',
                 border: 'none',
-                backgroundColor: activeTab === 'perfil' ? '#545454' : 'transparent',
-                color: activeTab === 'perfil' ? '#ffe192' : '#ffffff',
+                backgroundColor: activeTab === 'perfil' ? 'var(--card-bg, #545454)' : 'transparent',
+                color: activeTab === 'perfil' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                 fontWeight: activeTab === 'perfil' ? 'bold' : 'normal',
                 fontSize: '14px',
                 cursor: 'pointer',
@@ -200,14 +316,14 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 <span>Meu Perfil</span>
               </div>
               {activeTab === 'perfil' && (
-                <span style={{ fontSize: '12px', color: '#ffe192' }}>●</span>
+                <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)' }}>●</span>
               )}
             </button>
 
-            {/* Opção Geral */}
+            {/* Opção Aparência & Cores */}
             <button
               type="button"
-              onClick={() => setActiveTab('geral')}
+              onClick={() => setActiveTab('aparencia')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -216,31 +332,23 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 padding: '12px 14px',
                 borderRadius: '12px',
                 border: 'none',
-                backgroundColor: activeTab === 'geral' ? '#545454' : 'transparent',
-                color: activeTab === 'geral' ? '#ffe192' : '#ffffff',
-                fontWeight: activeTab === 'geral' ? 'bold' : 'normal',
+                backgroundColor: activeTab === 'aparencia' ? 'var(--card-bg, #545454)' : 'transparent',
+                color: activeTab === 'aparencia' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
+                fontWeight: activeTab === 'aparencia' ? 'bold' : 'normal',
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s',
-                boxShadow: activeTab === 'geral' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+                boxShadow: activeTab === 'aparencia' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span>⚙️</span>
-                <span>Geral</span>
+                <span>🎨</span>
+                <span>Aparência & Cores</span>
               </div>
-              <span
-                style={{
-                  fontSize: '10px',
-                  backgroundColor: '#666666',
-                  color: '#dddddd',
-                  padding: '2px 6px',
-                  borderRadius: '10px',
-                }}
-              >
-                Em breve
-              </span>
+              {activeTab === 'aparencia' && (
+                <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)' }}>●</span>
+              )}
             </button>
 
 
@@ -261,8 +369,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                   padding: '12px 14px',
                   borderRadius: '12px',
                   border: 'none',
-                  backgroundColor: activeTab === 'usuarios' ? '#545454' : 'transparent',
-                  color: activeTab === 'usuarios' ? '#ffe192' : '#ffffff',
+                  backgroundColor: activeTab === 'usuarios' ? 'var(--card-bg, #545454)' : 'transparent',
+                  color: activeTab === 'usuarios' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                   fontWeight: activeTab === 'usuarios' ? 'bold' : 'normal',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -278,8 +386,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 <span
                   style={{
                     fontSize: '10px',
-                    backgroundColor: '#ffe192',
-                    color: '#333333',
+                    backgroundColor: 'var(--accent-color, #ffe192)',
+                    color: 'var(--accent-text, #333333)',
                     padding: '2px 6px',
                     borderRadius: '10px',
                     fontWeight: 'bold',
@@ -302,8 +410,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 padding: '12px 14px',
                 borderRadius: '12px',
                 border: 'none',
-                backgroundColor: activeTab === 'caixinha' ? '#545454' : 'transparent',
-                color: activeTab === 'caixinha' ? '#ffe192' : '#ffffff',
+                backgroundColor: activeTab === 'caixinha' ? 'var(--card-bg, #545454)' : 'transparent',
+                color: activeTab === 'caixinha' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                 fontWeight: activeTab === 'caixinha' ? 'bold' : 'normal',
                 fontSize: '14px',
                 cursor: 'pointer',
@@ -319,7 +427,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               <span
                 style={{
                   fontSize: '10px',
-                  backgroundColor: isCaixinhaAtiva ? '#2a9d8f' : '#666666',
+                  backgroundColor: isCaixinhaAtiva ? '#2a9d8f' : 'var(--border-color, #666666)',
                   color: '#ffffff',
                   padding: '2px 8px',
                   borderRadius: '10px',
@@ -342,8 +450,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 padding: '12px 14px',
                 borderRadius: '12px',
                 border: 'none',
-                backgroundColor: activeTab === 'exportar' ? '#545454' : 'transparent',
-                color: activeTab === 'exportar' ? '#ffe192' : '#ffffff',
+                backgroundColor: activeTab === 'exportar' ? 'var(--card-bg, #545454)' : 'transparent',
+                color: activeTab === 'exportar' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                 fontWeight: activeTab === 'exportar' ? 'bold' : 'normal',
                 fontSize: '14px',
                 cursor: 'pointer',
@@ -357,7 +465,38 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 <span>Exportar</span>
               </div>
               {activeTab === 'exportar' && (
-                <span style={{ fontSize: '12px', color: '#2a9d8f' }}>●</span>
+                <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)' }}>●</span>
+              )}
+            </button>
+
+            {/* Opção Importar Nubank (CSV) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('importar_nubank')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: 'none',
+                backgroundColor: activeTab === 'importar_nubank' ? 'var(--card-bg, #545454)' : 'transparent',
+                color: activeTab === 'importar_nubank' ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
+                fontWeight: activeTab === 'importar_nubank' ? 'bold' : 'normal',
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s',
+                boxShadow: activeTab === 'importar_nubank' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span>📥</span>
+                <span>Importar Nubank</span>
+              </div>
+              {activeTab === 'importar_nubank' && (
+                <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)' }}>●</span>
               )}
             </button>
           </div>
@@ -367,7 +506,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
             style={{
               flex: 1,
               padding: '24px',
-              backgroundColor: '#4a4a4a',
+              backgroundColor: 'var(--card-bg, #545454)',
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
@@ -377,10 +516,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
             {activeTab === 'perfil' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
-                  <h4 style={{ margin: '0 0 6px 0', color: '#ffe192', fontSize: '18px', fontWeight: 'bold' }}>
+                  <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-color, #ffe192)', fontSize: '18px', fontWeight: 'bold' }}>
                     👤 Meu Perfil
                   </h4>
-                  <p style={{ margin: 0, color: '#dddddd', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: 'var(--text-secondary, #dddddd)', fontSize: '13px' }}>
                     Informações do usuário logado e gerenciamento das suas contas financeiras.
                   </p>
                 </div>
@@ -388,10 +527,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 {/* Card de Informações do Usuário */}
                 <div
                   style={{
-                    backgroundColor: '#3e3e3e',
+                    backgroundColor: 'var(--surface-bg, #3e3e3e)',
                     borderRadius: '16px',
                     padding: '20px 24px',
-                    border: '1px solid #666666',
+                    border: '1px solid var(--border-color, #666666)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '20px',
@@ -403,14 +542,14 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                       width: '56px',
                       height: '56px',
                       borderRadius: '50%',
-                      backgroundColor: '#ffe192',
-                      color: '#333333',
+                      backgroundColor: 'var(--accent-color, #ffe192)',
+                      color: 'var(--accent-text, #333333)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: 'bold',
                       fontSize: '24px',
-                      border: '3px solid #737373',
+                      border: '3px solid var(--border-color, #737373)',
                       flexShrink: 0,
                     }}
                   >
@@ -418,24 +557,24 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                    <div style={{ fontSize: '17px', fontWeight: 'bold', color: '#ffffff' }}>
+                    <div style={{ fontSize: '17px', fontWeight: 'bold', color: 'var(--text-primary, #ffffff)' }}>
                       {usuarioLogado?.nome || 'Usuário'}
                     </div>
                     
-                    <div style={{ fontSize: '13px', color: '#ffe192', fontWeight: 'bold', wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', wordBreak: 'break-all' }}>
                       ✉️ {usuarioLogado?.email || 'Nenhum e-mail cadastrado'}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span
                         style={{
-                          backgroundColor: '#545454',
-                          color: '#ffffff',
+                          backgroundColor: 'var(--card-bg, #545454)',
+                          color: 'var(--text-primary, #ffffff)',
                           padding: '3px 10px',
                           borderRadius: '10px',
                           fontSize: '11px',
                           fontWeight: 'bold',
-                          border: '1px solid #737373',
+                          border: '1px solid var(--border-color, #737373)',
                         }}
                       >
                         {isComercial ? '🏢 Perfil Comercial / Corporativo' : '👤 Perfil Individual / Pessoal'}
@@ -445,13 +584,13 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                       {isAdmin && (
                         <span
                           style={{
-                            backgroundColor: 'rgba(255, 225, 146, 0.2)',
-                            color: '#ffe192',
+                            backgroundColor: 'rgba(255, 225, 146, 0.15)',
+                            color: 'var(--accent-color, #ffe192)',
                             padding: '3px 10px',
                             borderRadius: '10px',
                             fontSize: '11px',
                             fontWeight: 'bold',
-                            border: '1px solid #ffe192',
+                            border: '1px solid var(--accent-color, #ffe192)',
                           }}
                         >
                           👑 Administrador do Sistema (Admin)
@@ -479,10 +618,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '4px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
-                      <h4 style={{ margin: 0, color: '#ffffff', fontSize: '16px', fontWeight: 'bold' }}>
+                      <h4 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '16px', fontWeight: 'bold' }}>
                         💳 Minhas Contas ({contas.length})
                       </h4>
-                      <p style={{ margin: '2px 0 0 0', color: '#cccccc', fontSize: '12px' }}>
+                      <p style={{ margin: '2px 0 0 0', color: 'var(--text-secondary, #cccccc)', fontSize: '12px' }}>
                         Alterne entre suas contas financeiras ou crie novas contas para seu orçamento.
                       </p>
                     </div>
@@ -493,8 +632,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                         if (onOpenCreateAccount) onOpenCreateAccount();
                       }}
                       style={{
-                        backgroundColor: '#ffe192',
-                        color: '#333333',
+                        backgroundColor: 'var(--accent-color, #ffe192)',
+                        color: 'var(--accent-text, #333333)',
                         border: 'none',
                         padding: '8px 16px',
                         borderRadius: '12px',
@@ -538,10 +677,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                         <div
                           key={c.id}
                           style={{
-                            backgroundColor: '#3e3e3e',
+                            backgroundColor: 'var(--surface-bg, #3e3e3e)',
                             borderRadius: '14px',
                             padding: '14px 18px',
-                            border: ehAtiva ? '1px solid #ffe192' : '1px solid #666666',
+                            border: ehAtiva ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -554,15 +693,15 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 width: '12px',
                                 height: '12px',
                                 borderRadius: '50%',
-                                backgroundColor: c.cor || '#ffe192',
+                                backgroundColor: c.cor || 'var(--accent-color, #ffe192)',
                                 flexShrink: 0,
                               }}
                             />
                             <div>
-                              <strong style={{ color: '#ffffff', fontSize: '14px', display: 'block' }}>
+                              <strong style={{ color: 'var(--text-primary, #ffffff)', fontSize: '14px', display: 'block' }}>
                                 {c.nome}
                               </strong>
-                              <span style={{ color: '#aaaaaa', fontSize: '12px', marginTop: '2px', display: 'block' }}>
+                              <span style={{ color: 'var(--text-secondary, #aaaaaa)', fontSize: '12px', marginTop: '2px', display: 'block' }}>
                                 {ehComercial ? '🏢 Conta Comercial' : '👤 Conta Individual'} {c.descricao ? `• ${c.descricao}` : ''}
                               </span>
                             </div>
@@ -575,9 +714,9 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 if (!ehAtiva) selecionarConta(c.id);
                               }}
                               style={{
-                                backgroundColor: ehAtiva ? '#2b4c3f' : '#545454',
-                                color: ehAtiva ? '#2a9d8f' : '#ffffff',
-                                border: ehAtiva ? '1px solid #2a9d8f' : '1px solid #737373',
+                                backgroundColor: ehAtiva ? 'rgba(42, 157, 143, 0.2)' : 'var(--card-bg, #545454)',
+                                color: ehAtiva ? '#2a9d8f' : 'var(--text-primary, #ffffff)',
+                                border: ehAtiva ? '1px solid #2a9d8f' : '1px solid var(--border-color, #737373)',
                                 padding: '6px 14px',
                                 borderRadius: '10px',
                                 fontSize: '12px',
@@ -602,8 +741,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                               }}
                               title="Excluir esta conta"
                               style={{
-                                backgroundColor: '#545454',
-                                border: '1px solid #737373',
+                                backgroundColor: 'var(--card-bg, #545454)',
+                                border: '1px solid var(--border-color, #737373)',
                                 borderRadius: '10px',
                                 padding: '6px 10px',
                                 cursor: 'pointer',
@@ -617,8 +756,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 e.currentTarget.style.borderColor = '#ff8585';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = '#545454';
-                                e.currentTarget.style.borderColor = '#737373';
+                                e.currentTarget.style.backgroundColor = 'var(--card-bg, #545454)';
+                                e.currentTarget.style.borderColor = 'var(--border-color, #737373)';
                               }}
                             >
                               <img src={iconLixeira} alt="Excluir conta" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />
@@ -629,6 +768,53 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                     })}
                   </div>
                 </div>
+
+                {/* Zona de Perigo - Exclusão Permanente da Conta do Usuário */}
+                <div
+                  style={{
+                    marginTop: '20px',
+                    backgroundColor: 'rgba(231, 111, 81, 0.08)',
+                    border: '1px solid rgba(231, 111, 81, 0.4)',
+                    borderRadius: '16px',
+                    padding: '18px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#e76f51', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚠️ Zona de Perigo • Excluir Conta Permanentemente
+                  </div>
+                  <p style={{ margin: 0, color: '#cccccc', fontSize: '12px', lineHeight: '1.4' }}>
+                    Ao excluir sua conta, todos os seus dados (contas financeiras, receitas, despesas, categorias, etiquetas e caixinha) serão deletados permanentemente de nossos servidores. Esta ação é <strong>irreversível</strong>.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmTextoInput('');
+                      setErroExcluirConta('');
+                      setIsConfirmExcluirContaOpen(true);
+                    }}
+                    style={{
+                      alignSelf: 'flex-start',
+                      padding: '9px 18px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      backgroundColor: '#e76f51',
+                      color: '#ffffff',
+                      fontWeight: 'bold',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      transition: 'background-color 0.2s, transform 0.1s',
+                    }}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = '#d45d40')}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = '#e76f51')}
+                  >
+                    🗑️ Excluir Minha Conta por Completo
+                  </button>
+                </div>
               </div>
             )}
 
@@ -637,10 +823,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
-                    <h4 style={{ margin: 0, color: '#ffe192', fontSize: '18px', fontWeight: 'bold' }}>
+                    <h4 style={{ margin: 0, color: 'var(--accent-color, #ffe192)', fontSize: '18px', fontWeight: 'bold' }}>
                       👑 Gestão de Usuários ({listaUsuariosAdmin.length})
                     </h4>
-                    <p style={{ margin: '4px 0 0 0', color: '#cccccc', fontSize: '13px' }}>
+                    <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary, #cccccc)', fontSize: '13px' }}>
                       Painel exclusivo de administração para controlar, gerenciar permissões e excluir usuários cadastrados.
                     </p>
                   </div>
@@ -649,9 +835,9 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                     type="button"
                     onClick={carregarUsuariosAdmin}
                     style={{
-                      backgroundColor: '#545454',
-                      color: '#ffffff',
-                      border: '1px solid #737373',
+                      backgroundColor: 'var(--surface-bg, #545454)',
+                      color: 'var(--text-primary, #ffffff)',
+                      border: '1px solid var(--border-color, #737373)',
                       padding: '8px 14px',
                       borderRadius: '12px',
                       fontSize: '12px',
@@ -683,7 +869,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 )}
 
                 {carregandoUsuarios ? (
-                  <div style={{ textAlign: 'center', padding: '32px', color: '#cccccc', fontSize: '14px' }}>
+                  <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary, #cccccc)', fontSize: '14px' }}>
                     Carregando usuários do banco de dados...
                   </div>
                 ) : (
@@ -695,10 +881,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                         <div
                           key={u.id}
                           style={{
-                            backgroundColor: '#3e3e3e',
+                            backgroundColor: 'var(--surface-bg, #3e3e3e)',
                             borderRadius: '16px',
                             padding: '16px 20px',
-                            border: ehAdminUser ? '1px solid #ffe192' : '1px solid #666666',
+                            border: ehAdminUser ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -711,14 +897,14 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 width: '42px',
                                 height: '42px',
                                 borderRadius: '50%',
-                                backgroundColor: ehAdminUser ? '#ffe192' : '#666666',
-                                color: ehAdminUser ? '#333333' : '#ffffff',
+                                backgroundColor: ehAdminUser ? 'var(--accent-color, #ffe192)' : 'var(--border-color, #666666)',
+                                color: ehAdminUser ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontWeight: 'bold',
                                 fontSize: '18px',
-                                border: ehAdminUser ? '2px solid #ffffff' : 'none',
+                                border: ehAdminUser ? '2px solid var(--text-primary, #ffffff)' : 'none',
                                 flexShrink: 0,
                               }}
                             >
@@ -727,17 +913,17 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
 
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <strong style={{ color: '#ffffff', fontSize: '15px' }}>{u.nome}</strong>
+                                <strong style={{ color: 'var(--text-primary, #ffffff)', fontSize: '15px' }}>{u.nome}</strong>
                                 {ehEuMesmo && (
                                   <span style={{ fontSize: '10px', backgroundColor: '#2a9d8f', color: '#ffffff', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
                                     Você (Logado)
                                   </span>
                                 )}
                               </div>
-                              <span style={{ color: '#ffe192', fontSize: '12px', display: 'block', marginTop: '2px', wordBreak: 'break-all' }}>
+                              <span style={{ color: 'var(--accent-color, #ffe192)', fontSize: '12px', display: 'block', marginTop: '2px', wordBreak: 'break-all' }}>
                                 ✉️ {u.email}
                               </span>
-                              <span style={{ color: '#aaaaaa', fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                              <span style={{ color: 'var(--text-secondary, #aaaaaa)', fontSize: '11px', display: 'block', marginTop: '2px' }}>
                                 {u.perfil_uso === 'comercial' ? '🏢 Perfil Comercial' : '👤 Perfil Individual'} • Cadastro: {u.provedor === 'google' ? '🌐 Conta Google' : '🔑 E-mail & Senha'}
                               </span>
                             </div>
@@ -761,9 +947,9 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 }
                               }}
                               style={{
-                                backgroundColor: ehAdminUser ? 'rgba(255, 225, 146, 0.2)' : '#545454',
-                                color: ehAdminUser ? '#ffe192' : '#ffffff',
-                                border: ehAdminUser ? '1px solid #ffe192' : '1px solid #737373',
+                                backgroundColor: ehAdminUser ? 'rgba(255, 225, 146, 0.15)' : 'var(--card-bg, #545454)',
+                                color: ehAdminUser ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
+                                border: ehAdminUser ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
                                 borderRadius: '10px',
                                 padding: '6px 12px',
                                 fontSize: '12px',
@@ -772,8 +958,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 cursor: u.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com' ? 'default' : 'pointer',
                               }}
                             >
-                              <option value="admin" style={{ backgroundColor: '#333', color: '#ffe192' }}>👑 Admin</option>
-                              <option value="comum" style={{ backgroundColor: '#333', color: '#fff' }}>👤 Comum</option>
+                              <option value="admin" style={{ backgroundColor: 'var(--card-bg, #333)', color: 'var(--accent-color, #ffe192)' }}>👑 Admin</option>
+                              <option value="comum" style={{ backgroundColor: 'var(--card-bg, #333)', color: 'var(--text-primary, #fff)' }}>👤 Comum</option>
                             </select>
 
                             {/* Botão Excluir Usuário do Banco de Dados */}
@@ -783,8 +969,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                 onClick={() => setUsuarioParaDeletar(u)}
                                 title="Excluir este usuário do banco de dados"
                                 style={{
-                                  backgroundColor: '#545454',
-                                  border: '1px solid #737373',
+                                  backgroundColor: 'var(--card-bg, #545454)',
+                                  border: '1px solid var(--border-color, #737373)',
                                   borderRadius: '10px',
                                   padding: '6px 12px',
                                   cursor: 'pointer',
@@ -801,8 +987,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                                   e.currentTarget.style.borderColor = '#ff8585';
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#545454';
-                                  e.currentTarget.style.borderColor = '#737373';
+                                  e.currentTarget.style.backgroundColor = 'var(--card-bg, #545454)';
+                                  e.currentTarget.style.borderColor = 'var(--border-color, #737373)';
                                 }}
                               >
                                 <img src={iconLixeira} alt="Excluir usuário" style={{ width: '15px', height: '15px', objectFit: 'contain' }} />
@@ -1025,10 +1211,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 {/* Card de Ativação / Status */}
                 <div
                   style={{
-                    backgroundColor: '#3e3e3e',
+                    backgroundColor: 'var(--surface-bg, #3e3e3e)',
                     borderRadius: '16px',
                     padding: '20px',
-                    border: '1px solid #666666',
+                    border: '1px solid var(--border-color, #666666)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -1036,13 +1222,13 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-primary, #ffffff)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span>Status:</span>
-                      <span style={{ color: isCaixinhaAtiva ? '#2a9d8f' : '#aaaaaa' }}>
+                      <span style={{ color: isCaixinhaAtiva ? '#2a9d8f' : 'var(--text-secondary, #aaaaaa)' }}>
                         {isCaixinhaAtiva ? '🟢 Ativada' : '⚪ Desativada'}
                       </span>
                     </div>
-                    <div style={{ fontSize: '12px', color: '#bbbbbb', marginTop: '4px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #bbbbbb)', marginTop: '4px' }}>
                       {isCaixinhaAtiva
                         ? 'A Caixinha está ativa e acumulando os saldos de todos os meses.'
                         : 'Clique no botão ao lado para ativar a funcionalidade da Caixinha.'}
@@ -1056,8 +1242,8 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                       padding: '10px 20px',
                       borderRadius: '20px',
                       border: 'none',
-                      backgroundColor: isCaixinhaAtiva ? '#e76f51' : '#ffe192',
-                      color: isCaixinhaAtiva ? '#ffffff' : '#333333',
+                      backgroundColor: isCaixinhaAtiva ? '#e76f51' : 'var(--accent-color, #ffe192)',
+                      color: isCaixinhaAtiva ? '#ffffff' : 'var(--accent-text, #333333)',
                       fontWeight: 'bold',
                       fontSize: '13px',
                       cursor: 'pointer',
@@ -1074,75 +1260,96 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 {isCaixinhaAtiva && (
                   <div
                     style={{
-                      backgroundColor: '#3e3e3e',
+                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
                       borderRadius: '16px',
                       padding: '20px',
-                      border: '1px solid #666666',
+                      border: '1px solid var(--border-color, #666666)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '16px',
                     }}
                   >
-                    <h5 style={{ margin: 0, color: '#ffe192', fontSize: '14px', fontWeight: 'bold' }}>
+                    <h5 style={{ margin: 0, color: 'var(--accent-color, #ffe192)', fontSize: '14px', fontWeight: 'bold' }}>
                       ⚙️ Saldo Inicial Guardado (Opcional)
                     </h5>
 
                     <div>
-                      <label style={{ display: 'block', color: '#dddddd', fontSize: '12px', marginBottom: '6px' }}>
+                      <label style={{ display: 'block', color: 'var(--text-secondary, #dddddd)', fontSize: '12px', marginBottom: '6px' }}>
                         Caso já possuísse algum valor guardado antes de usar o sistema:
                       </label>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <span style={{ color: '#ffe192', fontWeight: 'bold' }}>R$</span>
+                        <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>R$</span>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="numeric"
                           placeholder="0,00"
-                          value={valorInicialStr}
-                          onChange={(e) => handleValorInicialChange(e.target.value)}
+                          value={valorInicialInput}
+                          onChange={handleValorInicialChange}
                           style={{
                             padding: '8px 14px',
                             borderRadius: '10px',
-                            border: '1px solid #737373',
-                            backgroundColor: '#545454',
-                            color: '#ffffff',
+                            border: '1px solid var(--border-color, #737373)',
+                            backgroundColor: 'var(--card-bg, #545454)',
+                            color: 'var(--text-primary, #ffffff)',
                             fontSize: '14px',
                             fontWeight: 'bold',
                             outline: 'none',
                             width: '140px',
                           }}
                         />
+                        <button
+                          type="button"
+                          onClick={handleSalvarSaldoInicial}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            backgroundColor: salvoFeedback ? '#2a9d8f' : 'var(--accent-color, #ffe192)',
+                            color: salvoFeedback ? '#ffffff' : 'var(--accent-text, #333333)',
+                            fontWeight: 'bold',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                          }}
+                        >
+                          {salvoFeedback ? '✓ Salvo!' : '💾 Salvar Saldo Inicial'}
+                        </button>
                       </div>
                     </div>
 
                     {/* Resumo do Cálculo */}
                     <div
                       style={{
-                        backgroundColor: '#2e2e2e',
+                        backgroundColor: 'var(--card-bg, #2e2e2e)',
                         borderRadius: '12px',
                         padding: '14px 16px',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '8px',
                         fontSize: '13px',
-                        color: '#dddddd',
-                        borderLeft: '4px solid #ffe192',
+                        color: 'var(--text-secondary, #dddddd)',
+                        borderLeft: '4px solid var(--accent-color, #ffe192)',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>Economia Acumulada (Todos os Meses/Anos):</span>
-                        <span style={{ fontWeight: 'bold', color: '#ffffff' }}>
+                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary, #ffffff)' }}>
                           R$ {(saldoCaixinhaAcumulado - Number(saldoInicialCaixinha || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>Saldo Inicial Configurado:</span>
-                        <span style={{ fontWeight: 'bold', color: '#ffffff' }}>
+                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary, #ffffff)' }}>
                           R$ {(Number(saldoInicialCaixinha || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #444444', paddingTop: '8px', marginTop: '4px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#ffe192' }}>Total Guardado na Caixinha:</span>
-                        <span style={{ fontWeight: 'bold', color: '#ffe192', fontSize: '15px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color, #444444)', paddingTop: '8px', marginTop: '4px' }}>
+                        <span style={{ fontWeight: 'bold', color: 'var(--accent-color, #ffe192)' }}>Total Guardado na Caixinha:</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--accent-color, #ffe192)', fontSize: '15px' }}>
                           R$ {saldoCaixinhaAcumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -1152,26 +1359,467 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
               </div>
             )}
 
+            {/* Aba Aparência & Cores */}
+            {activeTab === 'aparencia' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <h4 style={{ margin: 0, color: 'var(--accent-color, #ffe192)', fontSize: '18px', fontWeight: 'bold' }}>
+                    🎨 Aparência & Paleta de Cores
+                  </h4>
+                  <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary, #cccccc)', fontSize: '13px' }}>
+                    Escolha entre os temas pré-definidos do sistema ou selecione cores customizadas para a interface do aplicativo.
+                  </p>
+                </div>
+
+                {salvoPaletaFeedback && (
+                  <div
+                    style={{
+                      backgroundColor: 'rgba(42, 157, 143, 0.2)',
+                      border: '1px solid #2a9d8f',
+                      color: '#50fa7b',
+                      padding: '10px 16px',
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}
+                  >
+                    ✓ Paleta de cores aplicada e salva com sucesso!
+                  </div>
+                )}
+
+                {/* 1. Presets Temáticos Prontos */}
+                <div>
+                  <label style={{ display: 'block', color: 'var(--text-primary, #ffffff)', fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>
+                    👑 Temas Pré-definidos
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '12px' }}>
+                    {(PALETAS_PREDEFINIDAS || []).map((preset) => {
+                      const isSelected =
+                        paletaCores?.accentColor?.toLowerCase() === preset.cores.accentColor.toLowerCase() &&
+                        paletaCores?.bgPrimary?.toLowerCase() === preset.cores.bgPrimary.toLowerCase();
+
+                      return (
+                        <div
+                          key={preset.id}
+                          onClick={() => {
+                            aplicarPaletaCores(preset.cores);
+                            setCustomCores(preset.cores);
+                            setSalvoPaletaFeedback(true);
+                            setTimeout(() => setSalvoPaletaFeedback(false), 2000);
+                          }}
+                          style={{
+                            backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                            borderRadius: '14px',
+                            padding: '14px',
+                            border: isSelected ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            boxShadow: isSelected ? '0 4px 14px rgba(0,0,0,0.3)' : 'none',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ color: isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)', fontSize: '13px' }}>
+                              {preset.nome}
+                            </strong>
+                            {isSelected && (
+                              <span style={{ fontSize: '10px', backgroundColor: 'var(--accent-color, #ffe192)', color: 'var(--accent-text, #333333)', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                                ✓ Ativo
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)' }}>{preset.descricao}</span>
+
+                          {/* Faixa de Amostra das Cores */}
+                          <div style={{ display: 'flex', height: '14px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', marginTop: '4px' }}>
+                            <div style={{ flex: 1, backgroundColor: preset.cores.bgPrimary }} title="Fundo" />
+                            <div style={{ flex: 1, backgroundColor: preset.cores.cardBg }} title="Cards" />
+                            <div style={{ flex: 1, backgroundColor: preset.cores.surfaceBg }} title="Superfície" />
+                            <div style={{ flex: 1, backgroundColor: preset.cores.accentColor }} title="Destaque" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Personalizador de Cores Customizadas */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                    borderRadius: '16px',
+                    padding: '18px 20px',
+                    border: '1px solid var(--border-color, #666666)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <label style={{ color: 'var(--accent-color, #ffe192)', fontSize: '14px', fontWeight: 'bold' }}>
+                    🎨 Personalizar Cor por Cor
+                  </label>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    {/* Cor de Destaque / Accent */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--card-bg, #484848)', padding: '10px 14px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-primary, #dddddd)', fontWeight: '500' }}>⭐ Cor de Destaque</span>
+                      <input
+                        type="color"
+                        value={customCores?.accentColor || '#ffe192'}
+                        onChange={(e) => setCustomCores({ ...customCores, accentColor: e.target.value })}
+                        style={{ border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', backgroundColor: 'transparent' }}
+                      />
+                    </div>
+
+                    {/* Fundo Principal */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--card-bg, #484848)', padding: '10px 14px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-primary, #dddddd)', fontWeight: '500' }}>🖥️ Fundo Principal</span>
+                      <input
+                        type="color"
+                        value={customCores?.bgPrimary || '#3a3a3a'}
+                        onChange={(e) => setCustomCores({ ...customCores, bgPrimary: e.target.value })}
+                        style={{ border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', backgroundColor: 'transparent' }}
+                      />
+                    </div>
+
+                    {/* Quadros e Cards */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--card-bg, #484848)', padding: '10px 14px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-primary, #dddddd)', fontWeight: '500' }}>📊 Quadros e Painéis</span>
+                      <input
+                        type="color"
+                        value={customCores?.cardBg || '#545454'}
+                        onChange={(e) => setCustomCores({ ...customCores, cardBg: e.target.value })}
+                        style={{ border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', backgroundColor: 'transparent' }}
+                      />
+                    </div>
+
+                    {/* Superfície de Inputs */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--card-bg, #484848)', padding: '10px 14px', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-primary, #dddddd)', fontWeight: '500' }}>🔲 Superfície de Botões</span>
+                      <input
+                        type="color"
+                        value={customCores?.surfaceBg || '#3e3e3e'}
+                        onChange={(e) => setCustomCores({ ...customCores, surfaceBg: e.target.value })}
+                        style={{ border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', backgroundColor: 'transparent' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        aplicarPaletaCores(customCores);
+                        setSalvoPaletaFeedback(true);
+                        setTimeout(() => setSalvoPaletaFeedback(false), 2500);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: 'var(--accent-color, #ffe192)',
+                        color: 'var(--accent-text, #333333)',
+                        fontWeight: 'bold',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      }}
+                    >
+                      💾 Aplicar Cores Customizadas
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const padrao = PALETAS_PREDEFINIDAS[0].cores;
+                        aplicarPaletaCores(padrao);
+                        setCustomCores(padrao);
+                        setSalvoPaletaFeedback(true);
+                        setTimeout(() => setSalvoPaletaFeedback(false), 2500);
+                      }}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-color, #737373)',
+                        backgroundColor: 'var(--card-bg, #4a4a4a)',
+                        color: 'var(--text-primary, #ffffff)',
+                        fontWeight: 'bold',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🔄 Restaurar Padrão
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Aba Exportar */}
             {activeTab === 'exportar' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
-                  <h4 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: 'bold' }}>
+                  <h4 style={{ margin: 0, color: 'var(--accent-color, #ffe192)', fontSize: '18px', fontWeight: 'bold' }}>
                     📤 Exportação de Dados
                   </h4>
-                  <p style={{ margin: '6px 0 0 0', color: '#cccccc', fontSize: '13px' }}>
+                  <p style={{ margin: '6px 0 0 0', color: 'var(--text-secondary, #cccccc)', fontSize: '13px' }}>
                     Exporte seus lançamentos e relatórios financeiros em formatos padrão de mercado.
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Seleção do Período */}
+                  <div
+                    style={{
+                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                      borderRadius: '16px',
+                      padding: '18px 20px',
+                      border: '1px solid var(--accent-color, #ffe192)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '14px',
+                    }}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--accent-color, #ffe192)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      🗓️ Selecione o Período a Exportar
+                    </div>
+
+                    {/* Botões de Seleção do Modo de Período */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModoExportacao('mes_a_mes');
+                          if (exportMes === 'Todos') setExportMes(mesSelecionado !== 'Todos' ? mesSelecionado : 'Jan');
+                        }}
+                        style={{
+                          flex: 1,
+                          minWidth: '90px',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: modoExportacao === 'mes_a_mes' ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
+                          backgroundColor: modoExportacao === 'mes_a_mes' ? 'var(--card-bg, #525252)' : 'var(--surface-bg, #2e2e2e)',
+                          color: modoExportacao === 'mes_a_mes' ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #cccccc)',
+                          fontWeight: 'bold',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        🗓️ Mês
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModoExportacao('ano_a_ano')}
+                        style={{
+                          flex: 1,
+                          minWidth: '90px',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: modoExportacao === 'ano_a_ano' ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
+                          backgroundColor: modoExportacao === 'ano_a_ano' ? 'var(--card-bg, #525252)' : 'var(--surface-bg, #2e2e2e)',
+                          color: modoExportacao === 'ano_a_ano' ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #cccccc)',
+                          fontWeight: 'bold',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        📅 Ano
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModoExportacao('intervalo')}
+                        style={{
+                          flex: 1.4,
+                          minWidth: '160px',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: modoExportacao === 'intervalo' ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
+                          backgroundColor: modoExportacao === 'intervalo' ? 'var(--card-bg, #525252)' : 'var(--surface-bg, #2e2e2e)',
+                          color: modoExportacao === 'intervalo' ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #cccccc)',
+                          fontWeight: 'bold',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        📆 Período Selecionado
+                      </button>
+                    </div>
+
+                    {/* MENSAGEM / PAINEL DINÂMICO CONFORME O MODO SELECIONADO */}
+                    {modoExportacao === 'mes_a_mes' && (
+                      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                        {/* Seletor de Mês */}
+                        <div style={{ flex: 1.2 }}>
+                          <label style={{ display: 'block', color: 'var(--text-secondary, #dddddd)', fontSize: '12px', marginBottom: '4px' }}>
+                            Mês Referência:
+                          </label>
+                          <select
+                            value={exportMes === 'Todos' ? (mesSelecionado !== 'Todos' ? mesSelecionado : 'Jan') : exportMes}
+                            onChange={(e) => setExportMes(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '9px 12px',
+                              borderRadius: '10px',
+                              border: '1px solid var(--border-color, #737373)',
+                              backgroundColor: 'var(--card-bg, #2e2e2e)',
+                              color: 'var(--accent-color, #ffe192)',
+                              fontWeight: 'bold',
+                              fontSize: '13px',
+                              outline: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m, idx) => (
+                              <option key={m} value={m}>
+                                {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][idx]} ({m})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Seletor de Ano */}
+                        <div style={{ flex: 1 }}>
+                          <label style={{ display: 'block', color: 'var(--text-secondary, #dddddd)', fontSize: '12px', marginBottom: '4px' }}>
+                            Ano Referência:
+                          </label>
+                          <select
+                            value={exportAno}
+                            onChange={(e) => setExportAno(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '9px 12px',
+                              borderRadius: '10px',
+                              border: '1px solid var(--border-color, #737373)',
+                              backgroundColor: 'var(--card-bg, #2e2e2e)',
+                              color: 'var(--accent-color, #ffe192)',
+                              fontWeight: 'bold',
+                              fontSize: '13px',
+                              outline: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {Array.from({ length: 7 }, (_, i) => 2024 + i).map((ano) => (
+                              <option key={ano} value={ano.toString()}>
+                                Ano {ano}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {modoExportacao === 'ano_a_ano' && (
+                      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ display: 'block', color: 'var(--text-secondary, #dddddd)', fontSize: '12px', marginBottom: '4px' }}>
+                            Ano de Exportação (Ano Inteiro):
+                          </label>
+                          <select
+                            value={exportAno}
+                            onChange={(e) => setExportAno(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '9px 12px',
+                              borderRadius: '10px',
+                              border: '1px solid var(--border-color, #737373)',
+                              backgroundColor: 'var(--card-bg, #2e2e2e)',
+                              color: 'var(--accent-color, #ffe192)',
+                              fontWeight: 'bold',
+                              fontSize: '13px',
+                              outline: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value="Todos">Todos os Anos (Histórico Completo)</option>
+                            {Array.from({ length: 7 }, (_, i) => 2024 + i).map((ano) => (
+                              <option key={ano} value={ano.toString()}>
+                                Ano Inteiro {ano}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {modoExportacao === 'intervalo' && (
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* De */}
+                        <div style={{ flex: 1, minWidth: '180px', backgroundColor: 'var(--card-bg, #2e2e2e)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color, #545454)' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                            🟢 De (Mês/Ano Início):
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <select
+                              value={intervaloMesInicio}
+                              onChange={(e) => setIntervaloMesInicio(e.target.value)}
+                              style={{ flex: 1.2, padding: '7px', borderRadius: '6px', backgroundColor: 'var(--surface-bg, #3e3e3e)', color: 'var(--text-primary, #fff)', border: '1px solid var(--border-color, #737373)', fontSize: '12px' }}
+                            >
+                              {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m, idx) => (
+                                <option key={m} value={m}>
+                                  {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][idx]}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={intervaloAnoInicio}
+                              onChange={(e) => setIntervaloAnoInicio(e.target.value)}
+                              style={{ flex: 1, padding: '7px', borderRadius: '6px', backgroundColor: 'var(--surface-bg, #3e3e3e)', color: 'var(--text-primary, #fff)', border: '1px solid var(--border-color, #737373)', fontSize: '12px' }}
+                            >
+                              {Array.from({ length: 7 }, (_, i) => 2024 + i).map((ano) => (
+                                <option key={ano} value={ano.toString()}>{ano}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Até */}
+                        <div style={{ flex: 1, minWidth: '180px', backgroundColor: 'var(--card-bg, #2e2e2e)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color, #545454)' }}>
+                          <span style={{ fontSize: '11px', color: '#e76f51', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+                            🔴 Até (Mês/Ano Fim):
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <select
+                              value={intervaloMesFim}
+                              onChange={(e) => setIntervaloMesFim(e.target.value)}
+                              style={{ flex: 1.2, padding: '7px', borderRadius: '6px', backgroundColor: '#3e3e3e', color: '#fff', border: '1px solid #737373', fontSize: '12px' }}
+                            >
+                              {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((m, idx) => (
+                                <option key={m} value={m}>
+                                  {['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][idx]}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={intervaloAnoFim}
+                              onChange={(e) => setIntervaloAnoFim(e.target.value)}
+                              style={{ flex: 1, padding: '7px', borderRadius: '6px', backgroundColor: '#3e3e3e', color: '#fff', border: '1px solid #737373', fontSize: '12px' }}
+                            >
+                              {Array.from({ length: 7 }, (_, i) => 2024 + i).map((ano) => (
+                                <option key={ano} value={ano.toString()}>{ano}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Opção 1: Excel / CSV */}
                   <div
                     style={{
-                      backgroundColor: '#3e3e3e',
+                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
                       borderRadius: '16px',
                       padding: '18px 20px',
-                      border: '1px solid #666666',
+                      border: '1px solid var(--border-color, #666666)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -1194,10 +1842,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                         📊
                       </div>
                       <div>
-                        <strong style={{ color: '#ffffff', fontSize: '15px', display: 'block' }}>
+                        <strong style={{ color: 'var(--text-primary, #ffffff)', fontSize: '15px', display: 'block' }}>
                           Exportar Excel (.csv)
                         </strong>
-                        <span style={{ color: '#aaaaaa', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        <span style={{ color: 'var(--text-secondary, #aaaaaa)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                           Gera uma planilha compatível com Microsoft Excel, Google Sheets e LibreOffice.
                         </span>
                       </div>
@@ -1205,7 +1853,19 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                     <button
                       type="button"
                       onClick={() => {
-                        onExportCSV();
+                        if (modoExportacao === 'mes_a_mes') {
+                          onExportCSV(exportMes, exportAno);
+                        } else if (modoExportacao === 'ano_a_ano') {
+                          onExportCSV('Todos', exportAno);
+                        } else if (modoExportacao === 'intervalo') {
+                          onExportCSV({
+                            modo: 'intervalo',
+                            mesInicio: intervaloMesInicio,
+                            anoInicio: intervaloAnoInicio,
+                            mesFim: intervaloMesFim,
+                            anoFim: intervaloAnoFim,
+                          });
+                        }
                       }}
                       style={{
                         backgroundColor: '#2a9d8f',
@@ -1230,10 +1890,10 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                   {/* Opção 2: PDF */}
                   <div
                     style={{
-                      backgroundColor: '#3e3e3e',
+                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
                       borderRadius: '16px',
                       padding: '18px 20px',
-                      border: '1px solid #666666',
+                      border: '1px solid var(--border-color, #666666)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -1256,7 +1916,7 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                         📄
                       </div>
                       <div>
-                        <strong style={{ color: '#ffffff', fontSize: '15px', display: 'block' }}>
+                        <strong style={{ color: 'var(--text-primary, #ffffff)', fontSize: '15px', display: 'block' }}>
                           Exportar PDF Executivo
                         </strong>
                         <span style={{ color: '#aaaaaa', fontSize: '12px', marginTop: '4px', display: 'block' }}>
@@ -1267,7 +1927,19 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                     <button
                       type="button"
                       onClick={() => {
-                        onExportPDF();
+                        if (modoExportacao === 'mes_a_mes') {
+                          onExportPDF(exportMes, exportAno);
+                        } else if (modoExportacao === 'ano_a_ano') {
+                          onExportPDF('Todos', exportAno);
+                        } else if (modoExportacao === 'intervalo') {
+                          onExportPDF({
+                            modo: 'intervalo',
+                            mesInicio: intervaloMesInicio,
+                            anoInicio: intervaloAnoInicio,
+                            mesFim: intervaloMesFim,
+                            anoFim: intervaloAnoFim,
+                          });
+                        }
                       }}
                       style={{
                         backgroundColor: '#e76f51',
@@ -1291,9 +1963,376 @@ export default function SettingsModal({ isOpen, onClose, onExportCSV, onExportPD
                 </div>
               </div>
             )}
+
+            {/* Aba Importar Nubank (CSV) */}
+            {activeTab === 'importar_nubank' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-color, #ffe192)', fontSize: '18px', fontWeight: 'bold' }}>
+                    📥 Importar Fatura do Nubank (CSV)
+                  </h4>
+                  <p style={{ margin: 0, color: 'var(--text-secondary, #cccccc)', fontSize: '13px', lineHeight: '1.5' }}>
+                    Selecione o arquivo <strong>.csv</strong> de fatura exportado diretamente do seu aplicativo ou Web do <strong>Nubank</strong>. O sistema processará as transações, identificará parcelamentos automaticamente e <strong>impedirá a criação de registros duplicados</strong>.
+                  </p>
+                </div>
+
+                {importFeedbackNubank && (
+                  <div
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      backgroundColor: importFeedbackNubank.tipo === 'sucesso' ? 'rgba(42, 157, 143, 0.2)' : 'rgba(231, 111, 81, 0.2)',
+                      border: `1px solid ${importFeedbackNubank.tipo === 'sucesso' ? '#2a9d8f' : '#e76f51'}`,
+                      color: importFeedbackNubank.tipo === 'sucesso' ? '#2a9d8f' : '#ff6b6b',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {importFeedbackNubank.mensagem}
+                  </div>
+                )}
+
+                {/* Passo 1: Seleção do Arquivo CSV */}
+                {!parsedCsvResult && (
+                  <div
+                    style={{
+                      border: '2px dashed var(--border-color, #666666)',
+                      borderRadius: '16px',
+                      padding: '36px 24px',
+                      textAlign: 'center',
+                      backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '14px',
+                    }}
+                  >
+                    <div style={{ fontSize: '42px' }}>📄</div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--text-primary, #ffffff)', marginBottom: '4px' }}>
+                        Clique para selecionar o arquivo CSV da fatura Nubank
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary, #aaaaaa)' }}>
+                        Formato esperado: date, title, amount (ex: 2026-08-02, Dl*99 Ride, "19,80")
+                      </div>
+                    </div>
+
+                    <label
+                      htmlFor="nubank-csv-input"
+                      style={{
+                        backgroundColor: 'var(--accent-color, #ffe192)',
+                        color: 'var(--accent-text, #333333)',
+                        padding: '10px 22px',
+                        borderRadius: '12px',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        transition: 'transform 0.2s',
+                        display: 'inline-block',
+                      }}
+                    >
+                      📁 Escolher Arquivo CSV
+                    </label>
+                    <input
+                      id="nubank-csv-input"
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCsvFileUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                )}
+
+                {/* Passo 2: Prévia e Validação Anti-Duplicata */}
+                {parsedCsvResult && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {/* Cards de Resumo */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--border-color, #555555)' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', fontWeight: 'bold' }}>TOTAL NO CSV</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-primary, #ffffff)', marginTop: '4px' }}>
+                          {parsedCsvResult.totalItens} <span style={{ fontSize: '12px', fontWeight: 'normal' }}>itens</span>
+                        </div>
+                      </div>
+
+                      <div style={{ backgroundColor: 'rgba(42, 157, 143, 0.15)', padding: '12px 14px', borderRadius: '12px', border: '1px solid #2a9d8f' }}>
+                        <div style={{ fontSize: '11px', color: '#2a9d8f', fontWeight: 'bold' }}>NOVOS A IMPORTAR</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#2a9d8f', marginTop: '4px' }}>
+                          {parsedCsvResult.qtdNovos} <span style={{ fontSize: '12px', fontWeight: 'normal' }}>itens</span>
+                        </div>
+                      </div>
+
+                      <div style={{ backgroundColor: 'rgba(231, 111, 81, 0.15)', padding: '12px 14px', borderRadius: '12px', border: '1px solid #e76f51' }}>
+                        <div style={{ fontSize: '11px', color: '#e76f51', fontWeight: 'bold' }}>DUPLICADOS (IGNORADOS)</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#e76f51', marginTop: '4px' }}>
+                          {parsedCsvResult.qtdDuplicados} <span style={{ fontSize: '12px', fontWeight: 'normal' }}>itens</span>
+                        </div>
+                      </div>
+
+                      <div style={{ backgroundColor: 'rgba(255, 225, 146, 0.15)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--accent-color, #ffe192)' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>VALOR TOTAL NOVOS</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent-color, #ffe192)', marginTop: '4px' }}>
+                          R$ {formatarCurrencyValue(parsedCsvResult.valorTotalNovos)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Seleção de Categoria Padrão */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: 'rgba(0,0,0,0.2)', padding: '12px 16px', borderRadius: '12px' }}>
+                      <label style={{ color: 'var(--text-primary, #ffffff)', fontSize: '13px', fontWeight: 'bold' }}>
+                        Categoria Padrão para os Novos Lançamentos:
+                      </label>
+                      <select
+                        value={categoriaImportacao}
+                        onChange={(e) => setCategoriaImportacao(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color, #666)',
+                          backgroundColor: 'var(--surface-bg, #333)',
+                          color: 'var(--text-primary, #fff)',
+                          fontSize: '13px',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="Nubank">Nubank (Padrão)</option>
+                        {categorias.map((cat) => (
+                          <option key={cat.id || cat.nome} value={cat.nome}>
+                            {cat.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Tabela de Prévia */}
+                    <div style={{ maxHeight: '440px', overflowY: 'auto', borderRadius: '12px', border: '1px solid var(--border-color, #555)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'rgba(0,0,0,0.4)', color: 'var(--accent-color, #ffe192)', borderBottom: '1px solid var(--border-color, #555)' }}>
+                            <th style={{ padding: '10px 12px' }}>Status</th>
+                            <th style={{ padding: '10px 12px' }}>Data</th>
+                            <th style={{ padding: '10px 12px' }}>Título / Estabelecimento</th>
+                            <th style={{ padding: '10px 12px' }}>Parcela</th>
+                            <th style={{ padding: '10px 12px' }}>Tipo</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right' }}>Valor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedCsvResult.itens.map((item, idx) => (
+                            <tr
+                              key={item.idTemp || idx}
+                              style={{
+                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                backgroundColor: item.isDuplicado ? 'rgba(231, 111, 81, 0.08)' : 'transparent',
+                                opacity: item.isDuplicado ? 0.6 : 1,
+                              }}
+                            >
+                              <td style={{ padding: '8px 12px' }}>
+                                {item.isDuplicado ? (
+                                  <span style={{ color: '#e76f51', fontWeight: 'bold', fontSize: '11px', backgroundColor: 'rgba(231,111,81,0.2)', padding: '2px 8px', borderRadius: '6px' }}>
+                                    ⚠️ Duplicado (Ignorado)
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#2a9d8f', fontWeight: 'bold', fontSize: '11px', backgroundColor: 'rgba(42,157,143,0.2)', padding: '2px 8px', borderRadius: '6px' }}>
+                                    ✅ Novo
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 12px', color: 'var(--text-secondary, #ccc)' }}>
+                                {item.dia}/{item.mes}/{item.ano}
+                              </td>
+                              <td style={{ padding: '8px 12px', color: 'var(--text-primary, #fff)', fontWeight: 'bold' }}>
+                                {item.nome}
+                              </td>
+                              <td style={{ padding: '8px 12px', color: 'var(--text-secondary, #aaa)' }}>
+                                {item.parcelas}
+                              </td>
+                              <td style={{ padding: '8px 12px' }}>
+                                <span style={{ color: item.tipo === 'receitas' ? '#2a9d8f' : '#e76f51', fontWeight: 'bold' }}>
+                                  {item.tipo === 'receitas' ? 'Receita' : 'Despesa'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-primary, #fff)', fontWeight: 'bold' }}>
+                                R$ {formatarCurrencyValue(item.valor)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Botões de Ação da Importação */}
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCsvFile(null);
+                          setParsedCsvResult(null);
+                        }}
+                        disabled={importandoNubank}
+                        style={{
+                          backgroundColor: 'transparent',
+                          color: 'var(--text-secondary, #aaa)',
+                          border: '1px solid var(--border-color, #666)',
+                          padding: '10px 18px',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔄 Cancelar / Escolher Outro
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmarImportacaoNubank}
+                        disabled={importandoNubank || parsedCsvResult.qtdNovos === 0}
+                        style={{
+                          backgroundColor: parsedCsvResult.qtdNovos > 0 ? 'var(--accent-color, #ffe192)' : '#666',
+                          color: parsedCsvResult.qtdNovos > 0 ? 'var(--accent-text, #333333)' : '#aaa',
+                          border: 'none',
+                          padding: '10px 22px',
+                          borderRadius: '12px',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          cursor: parsedCsvResult.qtdNovos > 0 ? 'pointer' : 'not-allowed',
+                          boxShadow: parsedCsvResult.qtdNovos > 0 ? '0 4px 12px rgba(0,0,0,0.3)' : 'none',
+                        }}
+                      >
+                        {importandoNubank ? 'Importando Lançamentos...' : `📥 Confirmar Importação de ${parsedCsvResult.qtdNovos} Novos Lançamentos`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Modal de Confirmação da Exclusão Permanente da Conta de Usuário */}
+      {isConfirmExcluirContaOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#2e2e2e',
+              borderRadius: '20px',
+              border: '2px solid #e76f51',
+              padding: '24px',
+              maxWidth: '440px',
+              width: '100%',
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#e76f51', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              🚨 Excluir Sua Conta de Usuário?
+            </div>
+
+            <p style={{ margin: 0, color: '#dddddd', fontSize: '13px', lineHeight: '1.5' }}>
+              Esta ação excluirá permanentemente o usuário <strong>{usuarioLogado?.nome}</strong> ({usuarioLogado?.email}) e <strong>TODOS os seus dados registrados</strong> (receitas, despesas, contas financeiras e preferências).
+            </p>
+
+            <div style={{ backgroundColor: '#3e3e3e', padding: '12px 14px', borderRadius: '10px', border: '1px dashed #e76f51' }}>
+              <label style={{ display: 'block', color: '#ffe192', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>
+                Digite "EXCLUIR" em maiúsculas para confirmar:
+              </label>
+              <input
+                type="text"
+                value={confirmTextoInput}
+                onChange={(e) => setConfirmTextoInput(e.target.value)}
+                placeholder="EXCLUIR"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #737373',
+                  backgroundColor: '#222222',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {erroExcluirConta && (
+              <div style={{ color: '#ff6b6b', fontSize: '12px', fontWeight: 'bold' }}>
+                ⚠️ {erroExcluirConta}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setIsConfirmExcluirContaOpen(false)}
+                disabled={carregandoExclusao}
+                style={{
+                  backgroundColor: '#545454',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={carregandoExclusao || confirmTextoInput.trim() !== 'EXCLUIR'}
+                onClick={async () => {
+                  setCarregandoExclusao(true);
+                  setErroExcluirConta('');
+                  const res = await excluirContaUsuario({ confirmacaoText: confirmTextoInput });
+                  setCarregandoExclusao(false);
+                  if (!res?.success) {
+                    setErroExcluirConta(res?.error || 'Erro ao excluir conta de usuário.');
+                  } else {
+                    setIsConfirmExcluirContaOpen(false);
+                    onClose();
+                  }
+                }}
+                style={{
+                  backgroundColor: confirmTextoInput.trim() === 'EXCLUIR' ? '#e76f51' : '#782b2b',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: confirmTextoInput.trim() === 'EXCLUIR' ? 'pointer' : 'not-allowed',
+                  opacity: confirmTextoInput.trim() === 'EXCLUIR' ? 1 : 0.6,
+                }}
+              >
+                {carregandoExclusao ? 'Excluindo...' : 'Sim, Excluir Minha Conta'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

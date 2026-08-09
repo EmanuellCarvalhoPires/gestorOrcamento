@@ -1,0 +1,37 @@
+{
+  "appId": "com.simplefinances.app",
+  "productName": "Simple Finances",
+  "directories": {
+    "output": "dist_installer"
+  },
+  "files": [
+    ".vite/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    "images/**/*",
+    "ssh-key-2026-07-30.key"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "images/app_icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Simple Finances",
+    "installerIcon": "images/app_icon.ico",
+    "uninstallerIcon": "images/app_icon.ico",
+    "uninstallDisplayName": "Simple Finances",
+    "runAfterFinish": true
+  }
+}

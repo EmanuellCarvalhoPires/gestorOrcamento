@@ -1,8 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
 export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
-  const { categorias, isComercial, setIsCategoryModalOpen } = useBudget();
+  const { categorias, etiquetaList, isComercial, setIsCategoryModalOpen } = useBudget();
+
+  // Estados dos dropdowns customizados
+  const [isCatOpen, setIsCatOpen] = useState(false);
+  const [hoveredCat, setHoveredCat] = useState(null);
+  const catRef = useRef(null);
+
+  const [isEtiqOpen, setIsEtiqOpen] = useState(false);
+  const [hoveredEtiq, setHoveredEtiq] = useState(null);
+  const etiqRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target)) {
+        setIsCatOpen(false);
+      }
+      if (etiqRef.current && !etiqRef.current.contains(e.target)) {
+        setIsEtiqOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getFormattedDateTime = (isoOrDate) => {
     if (!isoOrDate) return '';
@@ -80,7 +102,7 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
     >
       <div
         style={{
-          backgroundColor: '#545454',
+          backgroundColor: 'var(--card-bg, #545454)',
           borderRadius: '24px',
           padding: '32px',
           width: '90%',
@@ -91,15 +113,16 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
           boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
           maxHeight: '90vh',
           overflowY: 'auto',
+          color: 'var(--text-primary, #ffffff)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: '#ffffff', fontSize: '20px', fontWeight: 'bold' }}>
+          <h3 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '20px', fontWeight: 'bold' }}>
             ✏️ Editar Lançamento
           </h3>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#aaaaaa', fontSize: '18px', cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary, #aaaaaa)', fontSize: '18px', cursor: 'pointer' }}
           >
             ✕
           </button>
@@ -108,7 +131,7 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Nome */}
           <div>
-            <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+            <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', marginBottom: '6px' }}>
               {isComercial ? 'Nome do Cliente / Fornecedor / Lançamento' : 'Nome da Despesa / Receita'}
             </label>
             <input
@@ -119,9 +142,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 width: '100%',
                 padding: '12px 16px',
                 borderRadius: '14px',
-                border: '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffffff',
+                border: '1px solid var(--border-color, #737373)',
+                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                color: 'var(--text-primary, #ffffff)',
                 fontSize: '15px',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -133,7 +156,7 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
           {/* Valor + Data e Hora */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+              <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', marginBottom: '6px' }}>
                 Valor (R$)
               </label>
               <input
@@ -144,9 +167,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '14px',
-                  border: '1px solid #737373',
-                  backgroundColor: '#3e3e3e',
-                  color: '#ffe192',
+                  border: '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--accent-color, #ffe192)',
                   fontSize: '17px',
                   fontWeight: 'bold',
                   outline: 'none',
@@ -157,7 +180,7 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
             </div>
 
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', color: '#dddddd', fontSize: '13px', marginBottom: '6px' }}>
+              <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', marginBottom: '6px' }}>
                 📅 Data e Hora
               </label>
               <input
@@ -173,10 +196,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                   width: '100%',
                   padding: '12px 12px',
                   borderRadius: '14px',
-                  border: '1px solid #737373',
-                  backgroundColor: '#3e3e3e',
-                  color: '#ffffff',
-                  colorScheme: 'dark',
+                  border: '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--text-primary, #ffffff)',
                   fontSize: '13px',
                   outline: 'none',
                   boxSizing: 'border-box',
@@ -188,16 +210,16 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
           </div>
 
           {/* Classificação */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ color: '#dddddd', fontSize: '13px' }}>Classificação / Categoria</label>
+          <div style={{ position: 'relative' }} ref={catRef}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
+              <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>Classificação / Categoria</label>
               <button
                 type="button"
                 onClick={() => setIsCategoryModalOpen(true)}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#ffe192',
+                  color: 'var(--accent-color, #ffe192)',
                   fontSize: '12px',
                   cursor: 'pointer',
                   textDecoration: 'underline',
@@ -206,35 +228,225 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 + Gerenciar Categorias
               </button>
             </div>
-            <select
-              value={classificacao}
-              onChange={(e) => setClassificacao(e.target.value)}
+
+            <div
+              onClick={() => setIsCatOpen(!isCatOpen)}
               style={{
                 width: '100%',
-                padding: '12px 16px',
+                height: '44px',
+                padding: '0 14px',
                 borderRadius: '14px',
-                border: '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffffff',
-                fontSize: '14px',
-                outline: 'none',
+                border: isCatOpen ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
+                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                color: classificacao ? 'var(--text-primary, #ffffff)' : 'var(--text-secondary, #aaaaaa)',
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 boxSizing: 'border-box',
+                userSelect: 'none',
+                transition: 'border 0.2s',
               }}
             >
-              <option value="">Selecione uma Categoria...</option>
-              {categorias.map((cat) => (
-                <option key={cat.id || cat.nome} value={cat.nome}>
-                  {cat.nome}
-                </option>
-              ))}
-            </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                {(() => {
+                  const catObj = categorias.find((c) => c.nome.toLowerCase() === (classificacao || '').toLowerCase());
+                  if (catObj) {
+                    return (
+                      <span
+                        style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: catObj.cor || 'var(--accent-color, #ffe192)',
+                          display: 'inline-block',
+                          flexShrink: 0,
+                          boxShadow: `0 0 6px ${catObj.cor || '#ffe192'}aa`,
+                        }}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {classificacao || 'Selecione uma Categoria...'}
+                </span>
+              </div>
+              <span style={{ fontSize: '10px', color: 'var(--accent-color, #ffe192)', marginLeft: '6px' }}>
+                {isCatOpen ? '▲' : '▼'}
+              </span>
+            </div>
+
+            {isCatOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 200,
+                  backgroundColor: 'var(--card-bg, #2e2e2e)',
+                  border: '1px solid var(--accent-color, #ffe192)',
+                  borderRadius: '14px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  padding: '6px 0',
+                }}
+              >
+                {categorias.map((cat) => {
+                  const isHovered = hoveredCat === cat.nome;
+                  const isSelected = classificacao === cat.nome;
+                  return (
+                    <div
+                      key={cat.id || cat.nome}
+                      onMouseEnter={() => setHoveredCat(cat.nome)}
+                      onMouseLeave={() => setHoveredCat(null)}
+                      onClick={() => {
+                        setClassificacao(cat.nome);
+                        setIsCatOpen(false);
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        backgroundColor: isSelected ? 'var(--surface-bg, #525252)' : isHovered ? 'var(--surface-hover, rgba(255,255,255,0.08))' : 'transparent',
+                        color: isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
+                        fontWeight: isSelected ? 'bold' : 'normal',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'background-color 0.15s',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: cat.cor || 'var(--accent-color, #ffe192)',
+                          display: 'inline-block',
+                          flexShrink: 0,
+                          boxShadow: `0 0 6px ${cat.cor || '#ffe192'}aa`,
+                        }}
+                      />
+                      <span>{cat.nome}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          {/* ETIQUETA CUSTOM COMBOBOX */}
+          <div style={{ position: 'relative' }} ref={etiqRef}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
+              <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>
+                📌 Etiqueta / Tag
+              </label>
+            </div>
+
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type="text"
+                value={etiqueta}
+                onFocus={() => {
+                  setIsEtiqOpen(true);
+                }}
+                onChange={(e) => {
+                  setEtiqueta(e.target.value);
+                  setIsEtiqOpen(true);
+                }}
+                placeholder="Ex: Geral, Nubank..."
+                style={{
+                  width: '100%',
+                  height: '44px',
+                  padding: '0 32px 0 14px',
+                  borderRadius: '14px',
+                  border: isEtiqOpen ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--text-primary, #ffffff)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'border 0.2s',
+                }}
+              />
+              <span
+                onClick={() => setIsEtiqOpen(!isEtiqOpen)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '10px',
+                  color: 'var(--accent-color, #ffe192)',
+                  cursor: 'pointer',
+                }}
+              >
+                {isEtiqOpen ? '▲' : '▼'}
+              </span>
+            </div>
+
+            {isEtiqOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 200,
+                  backgroundColor: 'var(--card-bg, #2e2e2e)',
+                  border: '1px solid var(--accent-color, #ffe192)',
+                  borderRadius: '14px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  padding: '6px 0',
+                }}
+              >
+                {etiquetaList
+                  .filter((etiq) => etiq.toLowerCase().includes((etiqueta || '').toLowerCase()))
+                  .map((etiq) => {
+                    const isHovered = hoveredEtiq === etiq;
+                    const isSelected = etiqueta === etiq;
+                    return (
+                      <div
+                        key={etiq}
+                        onMouseEnter={() => setHoveredEtiq(etiq)}
+                        onMouseLeave={() => setHoveredEtiq(null)}
+                        onClick={() => {
+                          setEtiqueta(etiq);
+                          setIsEtiqOpen(false);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          backgroundColor: isSelected ? 'var(--surface-bg, #525252)' : isHovered ? 'var(--surface-hover, rgba(255,255,255,0.08))' : 'transparent',
+                          color: isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
+                          fontWeight: isSelected ? 'bold' : 'normal',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'background-color 0.15s',
+                        }}
+                      >
+                        <span>{etiq}</span>
+                        {isSelected && <span style={{ color: 'var(--accent-color, #ffe192)', fontSize: '12px' }}>✓</span>}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
 
           {/* Descrição / Observações (Máx. 200 caracteres) */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ color: '#dddddd', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
-              <span style={{ fontSize: '11px', color: (descricao || '').length > 180 ? '#ffe192' : '#aaaaaa' }}>
+              <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
+              <span style={{ fontSize: '11px', color: (descricao || '').length > 180 ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #aaaaaa)' }}>
                 {(descricao || '').length}/200
               </span>
             </div>
@@ -247,9 +459,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 width: '100%',
                 padding: '10px 14px',
                 borderRadius: '12px',
-                border: '1px solid #737373',
-                backgroundColor: '#3e3e3e',
-                color: '#ffffff',
+                border: '1px solid var(--border-color, #737373)',
+                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                color: 'var(--text-primary, #ffffff)',
                 fontSize: '13px',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -271,8 +483,8 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 padding: '12px',
                 borderRadius: '24px',
                 border: 'none',
-                backgroundColor: '#737373',
-                color: '#ffffff',
+                backgroundColor: 'var(--surface-bg, #737373)',
+                color: 'var(--text-primary, #ffffff)',
                 fontWeight: 'bold',
                 fontSize: '14px',
                 cursor: 'pointer',
@@ -287,8 +499,8 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
                 padding: '12px',
                 borderRadius: '24px',
                 border: 'none',
-                backgroundColor: '#ffe192',
-                color: '#333333',
+                backgroundColor: 'var(--accent-color, #ffe192)',
+                color: 'var(--accent-text, #333333)',
                 fontWeight: 'bold',
                 fontSize: '14px',
                 cursor: 'pointer',

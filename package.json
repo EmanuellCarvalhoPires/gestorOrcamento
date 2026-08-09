@@ -1,14 +1,15 @@
 {
-  "name": "gestororcamento",
-  "productName": "gestororcamento",
-  "version": "1.0.0",
-  "description": "My Electron application description",
+  "name": "simple-finances",
+  "productName": "Simple Finances",
+  "version": "1.0.1",
+  "description": "Simple Finances - Gestão Financeira Pessoal",
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make",
+    "make": "node -e \"try { require('fs').rmSync('out', { recursive: true, force: true }); } catch (e) {}\" && electron-forge make",
+    "build:nsis": "npx vite build && electron-builder --config electron-builder.json",
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\""
   },
@@ -20,6 +21,7 @@
   "license": "MIT",
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-appx": "^7.11.2",
     "@electron-forge/maker-deb": "^7.11.2",
     "@electron-forge/maker-rpm": "^7.11.2",
     "@electron-forge/maker-squirrel": "^7.11.2",
@@ -29,7 +31,10 @@
     "@electron-forge/plugin-vite": "^7.11.2",
     "@electron/fuses": "^1.8.0",
     "electron": "43.2.0",
-    "vite": "^5.4.21"
+    "electron-builder": "^26.15.3",
+    "omggif": "^1.0.10",
+    "png-to-ico": "^3.0.2",
+    "vite": "^8.2.1"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -39,5 +44,9 @@
     "pg": "^8.22.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
+  },
+  "overrides": {
+    "tar": "^7.5.21",
+    "tmp": "^0.2.6"
   }
 }

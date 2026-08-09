@@ -1,6 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, shell, nativeImage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+
+// Define o AppUserModelId para vinculacao do icone na barra de tarefas do Windows
+app.setAppUserModelId('com.simplefinances.app');
 import http from 'node:http';
 import started from 'electron-squirrel-startup';
 import dotenv from 'dotenv';
@@ -9,6 +13,7 @@ import dns from 'node:dns';
 import net from 'node:net';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 
 const { Pool } = pg;
 
@@ -53,20 +58,350 @@ function criarTransporterNodemailer() {
 // Remove a barra de menu nativa padrão (File, Edit, View, Window)
 Menu.setApplicationMenu(null);
 
-if (started) {
-  app.quit();
+// --- SISTEMA DE LOGS DEDICADO DE INSTALAÇÃO E EXECUÇÃO ---
+function registrarLogInstalacao(mensagem, erro = null) {
+  try {
+    const dataHora = new Date().toISOString();
+    const textoLog = `[${dataHora}] ${mensagem}${erro ? '\n[DETALHES DO ERRO]: ' + (erro.stack || erro) : ''}\n`;
+
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || 'C:\\', 'AppData', 'Local');
+    const pastaAppLog = path.join(localAppData, 'simplefinances');
+    
+    if (!fs.existsSync(pastaAppLog)) {
+      fs.mkdirSync(pastaAppLog, { recursive: true });
+    }
+
+    const caminhosLogs = [
+      path.join(pastaAppLog, 'SquirrelSetup.log'),
+      path.join(pastaAppLog, 'instalacao_erros.log'),
+      path.join(localAppData, 'SquirrelSetup.log') // Garante que o botão "Open Setup Log" abra o log do SimpleFinances
+    ];
+
+    for (const logPath of caminhosLogs) {
+      try {
+        fs.appendFileSync(logPath, textoLog, 'utf8');
+      } catch (e) {
+        // Ignora caso algum arquivo específico esteja travado
+      }
+    }
+  } catch (errLog) {
+    console.error('Erro ao gravar log de instalação:', errLog);
+  }
 }
 
-const pool = new Pool({
-  host: process.env.PG_HOST || '147.15.21.81',
-  port: parseInt(process.env.PG_PORT || '5432', 10),
-  database: process.env.PG_DATABASE || 'gestor_orcamento',
-  user: process.env.PG_USER || 'postgres',
-  password: process.env.PG_PASSWORD || 'admin123',
-  connectionTimeoutMillis: 10000,
+process.on('uncaughtException', (err) => {
+  registrarLogInstalacao('❌ EXCEÇÃO NÃO TRATADA (uncaughtException)', err);
 });
 
-import bcrypt from 'bcryptjs';
+process.on('unhandledRejection', (reason) => {
+  registrarLogInstalacao('❌ REJEIÇÃO NÃO TRATADA (unhandledRejection)', reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+function tratarEventosSquirrel() {
+  if (process.platform !== 'win32') return false;
+
+  const cmd = process.argv[1];
+  const isSquirrelArg = cmd && typeof cmd === 'string' && cmd.startsWith('--squirrel-');
+
+  if (!isSquirrelArg && !started) return false;
+
+  const comandoExecutado = isSquirrelArg ? cmd : '--squirrel-install';
+
+  registrarLogInstalacao(`=====================================================`);
+  registrarLogInstalacao(`🔄 EVENTO DE INSTALAÇÃO/ATUALIZAÇÃO DETECTADO: ${comandoExecutado}`);
+  registrarLogInstalacao(`📌 Executável: ${process.execPath}`);
+  registrarLogInstalacao(`📌 Argumentos: ${process.argv.join(' ')}`);
+
+  // Finaliza instâncias anteriores em segundo plano para liberar %LOCALAPPDATA%\simplefinances
+  try {
+    const currentPid = process.pid;
+    spawnSync('cmd.exe', ['/c', `taskkill /F /FI "PID ne ${currentPid}" /IM SimpleFinances.exe /T`], { encoding: 'utf8', windowsHide: true });
+  } catch (e) {
+    // Ignora se não houver outros processos
+  }
+
+  const target = path.basename(process.execPath);
+  const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+
+  if (comandoExecutado === '--squirrel-install' || comandoExecutado === '--squirrel-updated') {
+    registrarLogInstalacao(`🔨 Executando criação de atalhos via Update.exe: ${updateExe}`);
+    if (fs.existsSync(updateExe)) {
+      try {
+        const res = spawnSync(updateExe, ['--createShortcut=' + target], { encoding: 'utf8', windowsHide: true });
+        if (res.error) {
+          registrarLogInstalacao(`❌ Erro ao disparar Update.exe`, res.error);
+        } else {
+          registrarLogInstalacao(`✅ Atalhos criados com sucesso. ExitCode: ${res.status}. Saída: ${res.stdout || 'Sem saída'}`);
+        }
+      } catch (errSpawn) {
+        registrarLogInstalacao(`❌ Exceção ao executar Update.exe`, errSpawn);
+      }
+    } else {
+      registrarLogInstalacao(`⚠️ Update.exe não localizado em: ${updateExe}`);
+    }
+    registrarLogInstalacao(`🏁 Finalizando rotina de instalação.`);
+    app.quit();
+    process.exit(0);
+    return true;
+  }
+
+  if (comandoExecutado === '--squirrel-uninstall') {
+    registrarLogInstalacao(`🗑️ Removendo atalhos do sistema via Update.exe`);
+    if (fs.existsSync(updateExe)) {
+      try {
+        const res = spawnSync(updateExe, ['--removeShortcut=' + target], { encoding: 'utf8', windowsHide: true });
+        registrarLogInstalacao(`✅ Remoção de atalhos concluída. ExitCode: ${res.status}`);
+      } catch (errSpawn) {
+        registrarLogInstalacao(`❌ Falha ao remover atalhos`, errSpawn);
+      }
+    }
+    app.quit();
+    process.exit(0);
+    return true;
+  }
+
+  if (comandoExecutado === '--squirrel-obsolete') {
+    registrarLogInstalacao(`📦 Processo marcado como obsoleto pelo Squirrel. Encerrando.`);
+    app.quit();
+    process.exit(0);
+    return true;
+  }
+
+  app.quit();
+  process.exit(0);
+  return true;
+}
+
+const modoSquirrelAtivo = tratarEventosSquirrel();
+
+// Trava de Instância Única (Single Instance Lock) para impedir processos duplicados em segundo plano
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock && !modoSquirrelAtivo) {
+  registrarLogInstalacao('⚠️ Segunda instância detectada. Encerrando processo duplicado.');
+  app.quit();
+  process.exit(0);
+} else if (!modoSquirrelAtivo) {
+  app.on('second-instance', () => {
+    const wins = BrowserWindow.getAllWindows();
+    if (wins.length > 0) {
+      if (wins[0].isMinimized()) wins[0].restore();
+      wins[0].focus();
+    }
+  });
+}
+
+let sshTunnelProcess = null;
+
+function resolverHostPostgres(hostEnv) {
+  if (!hostEnv || hostEnv === '147.15.21.81' || hostEnv === 'localhost') {
+    return '127.0.0.1';
+  }
+  return hostEnv;
+}
+
+async function aguardarConexaoPorta(port, host = '127.0.0.1', timeoutMs = 4000) {
+  const net = require('net');
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ok = await new Promise((resolve) => {
+      const socket = new net.Socket();
+      socket.setTimeout(400);
+      socket.on('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.connect(port, host);
+    });
+
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
+async function iniciarTunelSSHSeNecessario() {
+  const hostAlvo = resolverHostPostgres(process.env.PG_HOST);
+  if (hostAlvo === '127.0.0.1') {
+    try {
+      const localPort = parseInt(process.env.PG_PORT || '5432', 10);
+
+      // Se a porta já está aceitando conexões (ex: túnel já rodando), não precisa abrir de novo
+      const jaPronto = await aguardarConexaoPorta(localPort, '127.0.0.1', 400);
+      if (jaPronto) {
+        console.log(`✅ [Túnel SSH] Porta ${localPort} já está ativa e pronta para conexões.`);
+        return;
+      }
+
+      const sshKeyCandidates = [
+        path.join(process.resourcesPath || '', 'ssh-key-2026-07-30.key'),
+        path.join(app.getAppPath(), 'ssh-key-2026-07-30.key'),
+        path.resolve(process.cwd(), 'ssh-key-2026-07-30.key'),
+        path.join(app.getPath('userData'), 'ssh-key-2026-07-30.key'),
+        path.join(__dirname, '..', '..', 'ssh-key-2026-07-30.key'),
+      ];
+
+      let keyPath = null;
+      for (const cand of sshKeyCandidates) {
+        if (fs.existsSync(cand)) {
+          keyPath = cand;
+          break;
+        }
+      }
+
+      if (keyPath) {
+        // Copia a chave para userData para evitar problemas de permissão em Program Files
+        const userDataKeyPath = path.join(app.getPath('userData'), 'ssh-key-2026-07-30.key');
+        if (keyPath !== userDataKeyPath) {
+          try {
+            fs.copyFileSync(keyPath, userDataKeyPath);
+            keyPath = userDataKeyPath;
+          } catch (errCopy) {
+            console.warn('⚠️ Não foi possível copiar chave para userData:', errCopy.message);
+          }
+        }
+
+        // Restringe permissões do arquivo de chave no Windows se necessário
+        if (process.platform === 'win32') {
+          try {
+            const { execSync } = require('child_process');
+            execSync(`icacls "${keyPath}" /inheritance:r /grant:r "%USERNAME%:F"`, { stdio: 'ignore', windowsHide: true });
+          } catch (e) {}
+        }
+
+        console.log(`🔌 [Túnel SSH] Iniciando túnel SSH seguro (127.0.0.1:${localPort} -> 147.15.21.81:5432) via chave: ${keyPath}`);
+        const { spawn } = require('child_process');
+        sshTunnelProcess = spawn('ssh', [
+          '-i', keyPath,
+          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'ServerAliveInterval=15',
+          '-o', 'ServerAliveCountMax=3',
+          '-L', `${localPort}:127.0.0.1:5432`,
+          'ubuntu@147.15.21.81',
+          '-N'
+        ], { windowsHide: true });
+
+        sshTunnelProcess.stderr.on('data', (data) => {
+          console.error(`⚠️ [Túnel SSH Stderr]: ${data.toString()}`);
+        });
+
+        sshTunnelProcess.on('error', (err) => {
+          console.error('⚠️ [Túnel SSH] Erro ao iniciar processo do túnel SSH:', err.message);
+        });
+
+        sshTunnelProcess.on('exit', (code, signal) => {
+          console.warn(`⚠️ [Túnel SSH] Processo finalizado com código ${code} / sinal ${signal}`);
+        });
+
+        app.on('will-quit', () => {
+          if (sshTunnelProcess) {
+            try { sshTunnelProcess.kill(); } catch (e) {}
+          }
+        });
+
+        // Aguarda a porta ficar pronta antes de prosseguir
+        const portaOnline = await aguardarConexaoPorta(localPort, '127.0.0.1', 4000);
+        if (portaOnline) {
+          console.log(`✅ [Túnel SSH] Conexão túnel estabelecida e pronta na porta ${localPort}.`);
+        } else {
+          console.warn(`⚠️ [Túnel SSH] Tempo limite esgotado ao aguardar a porta ${localPort}.`);
+        }
+      } else {
+        console.warn('⚠️ [Túnel SSH] Chave SSH não encontrada para iniciar o túnel automático.');
+      }
+    } catch (errTunnel) {
+      console.error('⚠️ [Túnel SSH] Falha na criação do túnel SSH:', errTunnel.message);
+    }
+  }
+}
+
+if (modoSquirrelAtivo) {
+  // Em modo Squirrel de instalação/atualização/remoção, não inicializa DB nem interface
+} else {
+  iniciarTunelSSHSeNecessario();
+
+  const pgSSL = process.env.PG_SSL === 'true' ? { rejectUnauthorized: false } : false;
+  const hostEfetivo = resolverHostPostgres(process.env.PG_HOST);
+  const hostBackupEfetivo = resolverHostPostgres(process.env.PG_BACKUP_HOST || process.env.PG_HOST);
+
+  // Banco de Dados Principal
+  const pool = new Pool({
+    host: hostEfetivo,
+    port: parseInt(process.env.PG_PORT || '5432', 10),
+    database: process.env.PG_DATABASE || 'gestor_orcamento',
+    user: process.env.PG_USER || 'postgres',
+    password: process.env.PG_PASSWORD || 'admin123',
+    ssl: pgSSL,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 10000,
+    max: 10,
+    allowExitOnIdle: true,
+  });
+
+  // Banco de Dados de Backup (Instância/Base Separada e Independente)
+  const poolBackup = new Pool({
+    host: hostBackupEfetivo,
+    port: parseInt(process.env.PG_BACKUP_PORT || process.env.PG_PORT || '5432', 10),
+    database: process.env.PG_BACKUP_DATABASE || 'gestor_orcamento_backup',
+    user: process.env.PG_BACKUP_USER || process.env.PG_USER || 'postgres',
+    password: process.env.PG_BACKUP_PASSWORD || process.env.PG_PASSWORD || 'admin123',
+    ssl: pgSSL,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 10000,
+    max: 10,
+    allowExitOnIdle: true,
+  });
+
+  pool.on('error', (err) => {
+    console.error('⚠️ [PostgreSQL Principal] Erro na conexão com o banco principal:', err.message);
+  });
+
+  poolBackup.on('error', (err) => {
+    console.error('⚠️ [PostgreSQL Backup] Erro na conexão com o banco de backup:', err.message);
+  });
+
+// Helper de Dupla Gravação e Failover Automático
+async function dbQuery(text, params = []) {
+  const isWriteQuery = /^\s*(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE)/i.test(text);
+
+  let resPrincipal = null;
+  let errPrincipal = null;
+
+  try {
+    resPrincipal = await pool.query(text, params);
+  } catch (err) {
+    errPrincipal = err;
+    console.error('⚠️ [PostgreSQL Principal] Falha na operação. Acionando Failover para o Backup:', err.message);
+  }
+
+  // Dupla Gravação: Replica modificações em tempo real no banco de backup
+  if (isWriteQuery) {
+    try {
+      await poolBackup.query(text, params);
+    } catch (errBkp) {
+      console.error('⚠️ [PostgreSQL Backup] Erro ao espelhar dados no banco de backup:', errBkp.message);
+    }
+  }
+
+  if (resPrincipal) return resPrincipal;
+
+  // Failover: Se o banco principal falhou, consulta no backup
+  try {
+    console.log('🔄 [PostgreSQL Failover] Respondendo requisição através do Banco de Backup...');
+    return await poolBackup.query(text, params);
+  } catch (errBkp) {
+    console.error('❌ [PostgreSQL Failover Error] Ambos os bancos falharam.');
+    throw errPrincipal || errBkp;
+  }
+}
 
 // Hashing de senha seguro via PBKDF2 com Salt
 function hashSenha(senha, salt = crypto.randomBytes(16).toString('hex')) {
@@ -129,13 +464,13 @@ async function salvarEtiquetaSeNova(usuarioId, etiquetaNome) {
   const nomeLimpo = etiquetaNome.trim();
 
   try {
-    const check = await pool.query(
+    const check = await dbQuery(
       'SELECT id FROM etiquetas WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))',
       [usuarioId, nomeLimpo]
     );
 
     if (check.rows.length === 0) {
-      await pool.query(
+      await dbQuery(
         'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
         [usuarioId, nomeLimpo]
       );
@@ -145,120 +480,146 @@ async function salvarEtiquetaSeNova(usuarioId, etiquetaNome) {
   }
 }
 
-// Inicializa as tabelas no PostgreSQL da Oracle Cloud
+// Inicializa as tabelas nos Bancos de Dados PostgreSQL (Principal + Backup em Dupla Gravação)
 async function initDatabase() {
+  const schemaQueries = [
+    `CREATE TABLE IF NOT EXISTS usuarios (
+      id VARCHAR(100) PRIMARY KEY,
+      nome VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      senha_hash VARCHAR(255),
+      perfil_uso VARCHAR(50) DEFAULT 'individual',
+      funcao VARCHAR(50) DEFAULT 'comum',
+      avatar_url TEXT,
+      google_id VARCHAR(255) UNIQUE,
+      provedor VARCHAR(50) DEFAULT 'local',
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`,
+    `ALTER TABLE usuarios ALTER COLUMN id TYPE VARCHAR(100) USING id::text;`,
+    `ALTER TABLE usuarios ALTER COLUMN senha_hash DROP NOT NULL;`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provedor VARCHAR(50) DEFAULT 'local';`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS perfil_uso VARCHAR(50) DEFAULT 'individual';`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcao VARCHAR(50) DEFAULT 'comum';`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS avatar_url TEXT;`,
+    `UPDATE usuarios SET funcao = 'admin' WHERE LOWER(email) = 'emanuell.carvalho.pires@gmail.com';`,
+
+    `CREATE TABLE IF NOT EXISTS contas (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      nome VARCHAR(255) NOT NULL,
+      tipo VARCHAR(50) DEFAULT 'individual',
+      descricao TEXT,
+      cor VARCHAR(50) DEFAULT '#ffe192',
+      caixinha_ativa BOOLEAN DEFAULT false,
+      caixinha_saldo_inicial NUMERIC(15, 2) DEFAULT 0.00,
+      paleta_cores JSONB DEFAULT NULL,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    );`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_ativa BOOLEAN DEFAULT false;`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_saldo_inicial NUMERIC(15, 2) DEFAULT 0.00;`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS paleta_cores JSONB DEFAULT NULL;`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS descricao TEXT;`,
+
+    `CREATE TABLE IF NOT EXISTS categorias (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      nome VARCHAR(255) NOT NULL,
+      cor VARCHAR(50) DEFAULT '#ffe192',
+      ordem INT DEFAULT 0,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    );`,
+    `ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ordem INT DEFAULT 0;`,
+
+    `CREATE TABLE IF NOT EXISTS etiquetas (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      nome VARCHAR(255) NOT NULL,
+      ordem INT DEFAULT 0,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    );`,
+    `ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS ordem INT DEFAULT 0;`,
+
+    `CREATE TABLE IF NOT EXISTS receitas (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      conta_id INT,
+      nome VARCHAR(255) NOT NULL,
+      valor NUMERIC(15,2) NOT NULL,
+      classificacao VARCHAR(100) DEFAULT 'Outros',
+      etiqueta VARCHAR(100) DEFAULT 'Geral',
+      parcelas VARCHAR(50) DEFAULT '1/1',
+      eh_fixa INT DEFAULT 0,
+      descricao TEXT,
+      mes VARCHAR(20) NOT NULL,
+      ano VARCHAR(10) NOT NULL,
+      data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+      FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
+    );`,
+
+    `CREATE TABLE IF NOT EXISTS despesas (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      conta_id INT,
+      nome VARCHAR(255) NOT NULL,
+      valor NUMERIC(15,2) NOT NULL,
+      classificacao VARCHAR(100) DEFAULT 'Outros',
+      etiqueta VARCHAR(100) DEFAULT 'Geral',
+      parcelas VARCHAR(50) DEFAULT '1/1',
+      eh_fixa INT DEFAULT 0,
+      descricao TEXT,
+      mes VARCHAR(20) NOT NULL,
+      ano VARCHAR(10) NOT NULL,
+      data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+      FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
+    );`,
+
+    `CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      token VARCHAR(255) NOT NULL,
+      expira_em TIMESTAMP NOT NULL,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`,
+
+    `CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id SERIAL PRIMARY KEY,
+      usuario_id VARCHAR(100) NOT NULL,
+      token VARCHAR(500) NOT NULL,
+      expira_em TIMESTAMP NOT NULL,
+      criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    );`,
+
+    `ALTER TABLE receitas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`,
+    `ALTER TABLE despesas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`,
+    `ALTER TABLE receitas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE despesas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`,
+    `ALTER TABLE receitas ALTER COLUMN data DROP NOT NULL;`,
+    `ALTER TABLE despesas ALTER COLUMN data DROP NOT NULL;`,
+    `ALTER TABLE receitas ALTER COLUMN data SET DEFAULT CURRENT_DATE;`,
+    `ALTER TABLE despesas ALTER COLUMN data SET DEFAULT CURRENT_DATE;`,
+
+    `CREATE INDEX IF NOT EXISTS idx_receitas_usuario ON receitas (usuario_id, conta_id, ano, mes);`,
+    `CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, conta_id, ano, mes);`
+  ];
+
   try {
-    // 1. Tabela de Usuários
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS usuarios (
-        id VARCHAR(100) PRIMARY KEY,
-        nome VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        senha_hash VARCHAR(255),
-        perfil_uso VARCHAR(50) DEFAULT 'individual',
-        funcao VARCHAR(50) DEFAULT 'comum',
-        avatar_url TEXT,
-        google_id VARCHAR(255) UNIQUE,
-        provedor VARCHAR(50) DEFAULT 'local',
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await pool.query(`ALTER TABLE usuarios ALTER COLUMN senha_hash DROP NOT NULL;`);
-    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;`);
-    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provedor VARCHAR(50) DEFAULT 'local';`);
-    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS funcao VARCHAR(50) DEFAULT 'comum';`);
-    await pool.query(`UPDATE usuarios SET funcao = 'admin' WHERE LOWER(email) = 'emanuell.carvalho.pires@gmail.com';`);
-
-    // 2. Tabela de Contas
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS contas (
-        id SERIAL PRIMARY KEY,
-        usuario_id VARCHAR(100) NOT NULL,
-        nome VARCHAR(255) NOT NULL,
-        tipo VARCHAR(50) DEFAULT 'individual',
-        descricao TEXT,
-        cor VARCHAR(50) DEFAULT '#ffe192',
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-      );
-    `);
-
-    // 3. Tabela de Categorias
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS categorias (
-        id SERIAL PRIMARY KEY,
-        usuario_id VARCHAR(100) NOT NULL,
-        nome VARCHAR(255) NOT NULL,
-        cor VARCHAR(50) DEFAULT '#ffe192',
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-      );
-    `);
-
-    // 4. Tabela de Etiquetas
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS etiquetas (
-        id SERIAL PRIMARY KEY,
-        usuario_id VARCHAR(100) NOT NULL,
-        nome VARCHAR(255) NOT NULL,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-      );
-    `);
-
-    // 5. Tabela de Receitas
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS receitas (
-        id SERIAL PRIMARY KEY,
-        usuario_id VARCHAR(100) NOT NULL,
-        conta_id INT,
-        nome VARCHAR(255) NOT NULL,
-        valor NUMERIC(15,2) NOT NULL,
-        classificacao VARCHAR(100) DEFAULT 'Outros',
-        etiqueta VARCHAR(100) DEFAULT 'Geral',
-        parcelas VARCHAR(50) DEFAULT '1/1',
-        eh_fixa INT DEFAULT 0,
-        descricao TEXT,
-        mes VARCHAR(20) NOT NULL,
-        ano VARCHAR(10) NOT NULL,
-        data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-        FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
-      );
-    `);
-
-    // 6. Tabela de Despesas
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS despesas (
-        id SERIAL PRIMARY KEY,
-        usuario_id VARCHAR(100) NOT NULL,
-        conta_id INT,
-        nome VARCHAR(255) NOT NULL,
-        valor NUMERIC(15,2) NOT NULL,
-        classificacao VARCHAR(100) DEFAULT 'Outros',
-        etiqueta VARCHAR(100) DEFAULT 'Geral',
-        parcelas VARCHAR(50) DEFAULT '1/1',
-        eh_fixa INT DEFAULT 0,
-        descricao TEXT,
-        mes VARCHAR(20) NOT NULL,
-        ano VARCHAR(10) NOT NULL,
-        data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-        FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE
-      );
-    `);
-
-    await pool.query(`ALTER TABLE receitas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE despesas ADD COLUMN IF NOT EXISTS conta_id INT REFERENCES contas(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE receitas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
-    await pool.query(`ALTER TABLE despesas ADD COLUMN IF NOT EXISTS data_transacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
-
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_receitas_usuario ON receitas (usuario_id, conta_id, ano, mes);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, conta_id, ano, mes);`);
-
-    console.log('✅ Banco de Dados PostgreSQL inicializado.');
+    for (const q of schemaQueries) {
+      try {
+        await dbQuery(q);
+      } catch (errQ) {
+        console.warn('ℹ️ Aviso na migração:', errQ.message);
+      }
+    }
+    console.log('✅ Bancos de Dados PostgreSQL inicializados individualmente com sucesso.');
   } catch (error) {
     console.error('❌ Erro ao inicializar tabelas PostgreSQL:', error);
   }
@@ -356,7 +717,7 @@ ipcMain.handle('enviar-codigo-verificacao', async (event, { email, nome }) => {
     const emailLimpo = email.trim().toLowerCase();
 
     // Verifica se já existe usuário cadastrado
-    const checkEmail = await pool.query(
+    const checkEmail = await dbQuery(
       'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
       [emailLimpo]
     );
@@ -446,7 +807,7 @@ ipcMain.handle('solicitar-recuperacao-senha', async (event, { email }) => {
     if (!email) return { success: false, error: 'Informe seu e-mail cadastrado.' };
 
     const emailLimpo = email.trim().toLowerCase();
-    const checkUser = await pool.query('SELECT id, nome FROM usuarios WHERE LOWER(email) = LOWER($1)', [emailLimpo]);
+    const checkUser = await dbQuery('SELECT id, nome FROM usuarios WHERE LOWER(email) = LOWER($1)', [emailLimpo]);
 
     if (checkUser.rows.length === 0) {
       return { success: false, error: 'E-mail não encontrado no sistema.' };
@@ -466,33 +827,37 @@ ipcMain.handle('solicitar-recuperacao-senha', async (event, { email }) => {
       console.log(`======================================================\n`);
       return {
         success: false,
-        error: 'Servidor de e-mail (SMTP) não configurado no arquivo .env.',
+        error: 'Serviço de e-mail temporariamente indisponível. Utilize o código de teste gerado no terminal do sistema.',
+        codigoConsole: codigo
       };
     }
 
     try {
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"Gestor de Orçamento" <${process.env.SMTP_USER}>`,
+        from: process.env.SMTP_FROM || 'gestororc@gmail.com',
         to: emailLimpo,
-        subject: `🔑 Redefinição de Senha: ${codigo}`,
+        subject: 'Código de Recuperação de Senha - Gestor de Orçamento',
+        text: `Olá ${usuario.nome},\n\nSeu código de verificação para redefinir sua senha é: ${codigo}\n\nEste código expira em 10 minutos.`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; background-color: #2b2b2b; color: #ffffff; border-radius: 16px; border: 1px solid #ffe192;">
-            <h2 style="color: #ffe192; text-align: center; margin-bottom: 20px;">Gestor de Orçamento</h2>
-            <p style="font-size: 15px; color: #e0e0e0;">Olá, <strong>${usuario.nome}</strong>!</p>
-            <p style="font-size: 14px; color: #cccccc;">Recebemos uma solicitação de redefinição de senha para sua conta. Utilize o código de 6 dígitos abaixo:</p>
-            <div style="background-color: #3e3e3e; padding: 18px; text-align: center; border-radius: 12px; margin: 24px 0; border: 1px dashed #ffe192;">
-              <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #ffe192;">${codigo}</span>
+          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #ffe192;">Recuperação de Senha</h2>
+            <p>Olá <strong>${usuario.nome}</strong>,</p>
+            <p>Você solicitou a redefinição da sua senha. Utilize o código abaixo para prosseguir:</p>
+            <div style="background-color: #2b2b2b; color: #ffe192; font-size: 28px; font-weight: bold; text-align: center; padding: 15px; border-radius: 8px; margin: 20px 0; letter-spacing: 5px;">
+              ${codigo}
             </div>
-            <p style="font-size: 12px; color: #aaaaaa; text-align: center;">Este código expira em 10 minutos.</p>
+            <p>Este código expira em 10 minutos. Se você não solicitou a redefinição, ignore este e-mail.</p>
           </div>
-        `,
+        `
       });
-      return { success: true, message: `Código de redefinição de 6 dígitos enviado para ${emailLimpo} com sucesso! Verifique a caixa de entrada.` };
-    } catch (smtpErr) {
-      console.error('⚠️ Falha no SMTP ao enviar e-mail de recuperação:', smtpErr.message);
+
+      return { success: true, message: 'Código de recuperação enviado para o seu e-mail!' };
+    } catch (errEmail) {
+      console.error('Erro ao enviar e-mail via SMTP:', errEmail);
       return {
         success: false,
-        error: `Não foi possível enviar o e-mail real (${smtpErr.message}). Verifique a Senha de App do Gmail no arquivo .env.`,
+        error: 'Falha ao enviar e-mail. Utilize o código de emergência exibido no terminal.',
+        codigoConsole: codigo
       };
     }
   } catch (err) {
@@ -504,28 +869,28 @@ ipcMain.handle('solicitar-recuperacao-senha', async (event, { email }) => {
 ipcMain.handle('confirmar-recuperacao-senha', async (event, { email, codigo, novaSenha }) => {
   try {
     if (!email || !codigo || !novaSenha) {
-      return { success: false, error: 'Preencha todos os campos.' };
+      return { success: false, error: 'Todos os campos são obrigatórios.' };
     }
 
     const emailLimpo = email.trim().toLowerCase();
-    const registro = codigosVerificacao.get(`reset_${emailLimpo}`);
+    const dadosVerificacao = codigosVerificacao.get(`reset_${emailLimpo}`);
 
-    if (!registro) {
-      return { success: false, error: 'Nenhum código solicitado ou o código expirou.' };
+    if (!dadosVerificacao) {
+      return { success: false, error: 'Nenhum código foi solicitado para este e-mail ou o código expirou.' };
     }
 
-    if (Date.now() > registro.expiraEm) {
+    if (Date.now() > dadosVerificacao.expiraEm) {
       codigosVerificacao.delete(`reset_${emailLimpo}`);
-      return { success: false, error: 'O código de redefinição expirou. Solicite um novo.' };
+      return { success: false, error: 'O código de verificação expirou. Solicite um novo.' };
     }
 
-    if (registro.codigo !== codigo.trim()) {
-      return { success: false, error: 'Código de redefinição incorreto. Verifique os 6 dígitos digitados.' };
+    if (dadosVerificacao.codigo !== codigo.trim()) {
+      return { success: false, error: 'Código de verificação incorreto.' };
     }
 
     const { hashSenha: novaSenhaHash } = hashSenha(novaSenha);
 
-    await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE LOWER(email) = LOWER($2)', [novaSenhaHash, emailLimpo]);
+    await dbQuery('UPDATE usuarios SET senha_hash = $1 WHERE LOWER(email) = LOWER($2)', [novaSenhaHash, emailLimpo]);
     codigosVerificacao.delete(`reset_${emailLimpo}`);
 
     return { success: true, message: 'Senha redefinida com sucesso!' };
@@ -542,7 +907,7 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUs
       return { success: false, error: checagemEmail.erro };
     }
 
-    const checkEmail = await pool.query(
+    const checkEmail = await dbQuery(
       'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
       [email.trim()]
     );
@@ -555,27 +920,27 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUs
     const { hashSenha: senhaCriptografada } = hashSenha(senha);
     const perfilFinal = perfilUso === 'comercial' ? 'comercial' : 'individual';
 
-    await pool.query(
+    await dbQuery(
       'INSERT INTO usuarios (id, nome, email, senha_hash, perfil_uso) VALUES ($1, $2, $3, $4, $5)',
       [userId, nome.trim(), email.toLowerCase().trim(), senhaCriptografada, perfilFinal]
     );
 
     const nomeContaInicial = perfilFinal === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
-    const resConta = await pool.query(
+    const resConta = await dbQuery(
       'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [userId, nomeContaInicial, perfilFinal, 'Conta inicial padrão', '#ffe192']
     );
 
     const catPadrao = getCategoriasPadrao(perfilFinal);
     for (const cat of catPadrao) {
-      await pool.query(
+      await dbQuery(
         'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
         [userId, cat.nome, cat.cor]
       );
     }
 
     for (const etiq of ETIQUETAS_PADRAO) {
-      await pool.query(
+      await dbQuery(
         'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
         [userId, etiq]
       );
@@ -591,24 +956,49 @@ ipcMain.handle('registrar-usuario', async (event, { nome, email, senha, perfilUs
         nome: nome.trim(),
         email: email.toLowerCase().trim(),
         perfilUso: perfilFinal,
+        avatarUrl: '',
         funcao: funcaoFinal,
       },
       contaInicial: resConta.rows[0],
     };
-  } catch (error) {
-    console.error('Erro no registro:', error);
-    return { success: false, error: 'Erro ao cadastrar usuário.' };
+  } catch (err) {
+    console.error('Erro em registrar-usuario:', err);
+    return { success: false, error: err.message };
   }
 });
 
+// Rate Limiting para Login (Proteção contra Força Bruta)
+const tentativasLoginMap = new Map();
+
 ipcMain.handle('login-usuario', async (event, { email, senha }) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM usuarios WHERE LOWER(email) = LOWER($1)',
-      [email.trim()]
+    if (!email || !senha) {
+      return { success: false, error: 'E-mail e senha são obrigatórios.' };
+    }
+
+    const emailLimpo = email.trim().toLowerCase();
+    const agora = Date.now();
+    const tentativas = tentativasLoginMap.get(emailLimpo) || { count: 0, bloqueadoAte: 0 };
+
+    if (tentativas.bloqueadoAte > agora) {
+      const minutosRestantes = Math.ceil((tentativas.bloqueadoAte - agora) / (60 * 1000));
+      return {
+        success: false,
+        error: `Muitas tentativas falhas de login. Conta bloqueada temporariamente por mais ${minutosRestantes} minuto(s).`,
+      };
+    }
+
+    const result = await dbQuery(
+      'SELECT id, nome, email, senha_hash, perfil_uso, avatar_url, funcao FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [emailLimpo]
     );
 
     if (result.rows.length === 0) {
+      tentativas.count += 1;
+      if (tentativas.count >= 5) {
+        tentativas.bloqueadoAte = agora + 15 * 60 * 1000;
+      }
+      tentativasLoginMap.set(emailLimpo, tentativas);
       return { success: false, error: 'E-mail não cadastrado.' };
     }
 
@@ -616,8 +1006,16 @@ ipcMain.handle('login-usuario', async (event, { email, senha }) => {
     const senhaValida = verificarSenha(senha, usuario.senha_hash);
 
     if (!senhaValida) {
+      tentativas.count += 1;
+      if (tentativas.count >= 5) {
+        tentativas.bloqueadoAte = agora + 15 * 60 * 1000;
+      }
+      tentativasLoginMap.set(emailLimpo, tentativas);
       return { success: false, error: 'Senha incorreta.' };
     }
+
+    // Sucesso - reseta contador de tentativas
+    tentativasLoginMap.delete(emailLimpo);
 
     const ehAdminOwner = usuario.email.toLowerCase() === 'emanuell.carvalho.pires@gmail.com';
     const funcaoFinal = usuario.funcao || (ehAdminOwner ? 'admin' : 'comum');
@@ -629,6 +1027,7 @@ ipcMain.handle('login-usuario', async (event, { email, senha }) => {
         nome: usuario.nome,
         email: usuario.email,
         perfilUso: usuario.perfil_uso || 'individual',
+        avatarUrl: usuario.avatar_url || '',
         funcao: funcaoFinal,
       },
     };
@@ -685,7 +1084,10 @@ async function realizarOAuth2Google(clientId, clientSecret) {
             const tokenData = await tokenRes.json();
 
             if (!tokenData.access_token) {
-              return resolve(null);
+              const msgErro = tokenData.error_description || tokenData.error || 'Falha ao trocar código de autorização por token do Google.';
+              registrarLogInstalacao(`❌ Google OAuth Token Error: ${JSON.stringify(tokenData)}`);
+              console.error('⚠️ Google Token Error:', tokenData);
+              return resolve({ error: `Erro na API do Google: ${msgErro}` });
             }
 
             const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -754,7 +1156,7 @@ async function realizarOAuth2Google(clientId, clientSecret) {
       console.error('Erro no servidor callback do Google:', err);
       if (!resolved) {
         resolved = true;
-        resolve(null);
+        resolve({ error: `Erro no servidor local de callback: ${err.message}` });
       }
     });
 
@@ -762,7 +1164,7 @@ async function realizarOAuth2Google(clientId, clientSecret) {
       if (!resolved) {
         resolved = true;
         server.close();
-        resolve(null);
+        resolve({ error: 'Tempo limite excedido aguardando resposta do Google (2 minutos).' });
       }
     }, 120000);
   });
@@ -776,8 +1178,17 @@ ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) 
 
     const googleProfile = await realizarOAuth2Google(clientId, clientSecret);
 
-    if (!googleProfile || !googleProfile.email) {
-      return { success: false, error: 'Autenticação com o Google foi cancelada.' };
+    if (!googleProfile) {
+      return { success: false, error: 'Autenticação com o Google foi cancelada ou expirou.' };
+    }
+
+    if (googleProfile.error) {
+      registrarLogInstalacao(`⚠️ Falha no Google Profile: ${googleProfile.error}`);
+      return { success: false, error: googleProfile.error };
+    }
+
+    if (!googleProfile.email) {
+      return { success: false, error: 'O perfil do Google não retornou um endereço de e-mail válido.' };
     }
 
     const emailLimpo = googleProfile.email.toLowerCase().trim();
@@ -786,7 +1197,7 @@ ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) 
     const nomeUsuario = googleProfile.name || googleProfile.nome || emailLimpo.split('@')[0];
 
     // Verificar se usuário já existe no PostgreSQL
-    let userQuery = await pool.query(
+    let userQuery = await dbQuery(
       'SELECT * FROM usuarios WHERE google_id = $1 OR LOWER(email) = $2',
       [googleId, emailLimpo]
     );
@@ -794,52 +1205,55 @@ ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) 
     let userId;
     let perfilFinal = perfilUso === 'comercial' ? 'comercial' : 'individual';
 
+    const ehAdminOwner = emailLimpo === 'emanuell.carvalho.pires@gmail.com';
+
     if (userQuery.rows.length > 0) {
       const u = userQuery.rows[0];
       userId = u.id;
       perfilFinal = u.perfil_uso || 'individual';
+      const funcaoFinal = ehAdminOwner ? 'admin' : (u.funcao || 'comum');
 
-      await pool.query(
-        'UPDATE usuarios SET google_id = $1, avatar_url = COALESCE($2, avatar_url), provedor = \'google\' WHERE id = $3',
-        [googleId, avatarUrl || null, userId]
+      await dbQuery(
+        'UPDATE usuarios SET google_id = $1, avatar_url = COALESCE($2, avatar_url), provedor = \'google\', funcao = $3 WHERE id = $4',
+        [googleId, avatarUrl || null, funcaoFinal, userId]
       );
     } else {
       userId = `usr_g_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await pool.query(
-        'INSERT INTO usuarios (id, nome, email, senha_hash, perfil_uso, avatar_url, google_id, provedor) VALUES ($1, $2, $3, NULL, $4, $5, $6, \'google\')',
-        [userId, nomeUsuario, emailLimpo, perfilFinal, avatarUrl, googleId]
+      const funcaoInicial = ehAdminOwner ? 'admin' : 'comum';
+      await dbQuery(
+        'INSERT INTO usuarios (id, nome, email, senha_hash, perfil_uso, avatar_url, google_id, provedor, funcao) VALUES ($1, $2, $3, NULL, $4, $5, $6, \'google\', $7)',
+        [userId, nomeUsuario, emailLimpo, perfilFinal, avatarUrl, googleId, funcaoInicial]
       );
 
       const nomeConta = perfilFinal === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
-      await pool.query(
+      await dbQuery(
         'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5)',
         [userId, nomeConta, perfilFinal, 'Conta inicial Google', '#ffe192']
       );
 
       const catPadrao = getCategoriasPadrao(perfilFinal);
       for (const cat of catPadrao) {
-        await pool.query(
+        await dbQuery(
           'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
           [userId, cat.nome, cat.cor]
         );
       }
 
       for (const etiq of ETIQUETAS_PADRAO) {
-        await pool.query(
+        await dbQuery(
           'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
           [userId, etiq]
         );
       }
     }
 
-    const contasRes = await pool.query(
+    const contasRes = await dbQuery(
       'SELECT * FROM contas WHERE usuario_id = $1 ORDER BY id ASC LIMIT 1',
       [userId]
     );
 
-    const ehAdminOwner = emailLimpo === 'emanuell.carvalho.pires@gmail.com';
-    const userRes = await pool.query('SELECT funcao FROM usuarios WHERE id = $1', [userId]);
-    const funcaoFinal = userRes.rows[0]?.funcao || (ehAdminOwner ? 'admin' : 'comum');
+    const userRes = await dbQuery('SELECT funcao FROM usuarios WHERE id = $1', [userId]);
+    const funcaoFinal = ehAdminOwner ? 'admin' : (userRes.rows[0]?.funcao || 'comum');
 
     return {
       success: true,
@@ -854,8 +1268,9 @@ ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) 
       contaInicial: contasRes.rows[0],
     };
   } catch (error) {
+    registrarLogInstalacao('❌ Erro no handler login-google:', error);
     console.error('Erro no login do Google:', error);
-    return { success: false, error: 'Erro ao autenticar com o Google.' };
+    return { success: false, error: `Erro no login com o Google: ${error.message || error}` };
   }
 });
 
@@ -916,6 +1331,33 @@ ipcMain.handle('deletar-usuario-admin', async (event, { targetUserId, usuarioId 
     return { success: true };
   } catch (err) {
     console.error('Erro ao deletar usuário pelo Admin:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('excluir-conta-usuario', async (event, { usuarioId, confirmacaoText }) => {
+  try {
+    if (!usuarioId) return { success: false, error: 'Usuário não identificado.' };
+    if ((confirmacaoText || '').trim().toUpperCase() !== 'EXCLUIR') {
+      return { success: false, error: 'Texto de confirmação incorreto. Digite EXCLUIR para confirmar.' };
+    }
+
+    // Exclusão em cascata de todas as entidades associadas ao usuário
+    await pool.query('DELETE FROM receitas WHERE usuario_id = $1', [usuarioId]);
+    await pool.query('DELETE FROM despesas WHERE usuario_id = $1', [usuarioId]);
+    await pool.query('DELETE FROM categorias WHERE usuario_id = $1', [usuarioId]);
+    await pool.query('DELETE FROM etiquetas WHERE usuario_id = $1', [usuarioId]);
+    await pool.query('DELETE FROM contas WHERE usuario_id = $1', [usuarioId]);
+
+    try {
+      await pool.query('DELETE FROM caixinha WHERE usuario_id = $1', [usuarioId]);
+    } catch {}
+
+    await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao excluir conta de usuário por completo:', err);
     return { success: false, error: err.message };
   }
 });
@@ -1005,6 +1447,64 @@ ipcMain.handle('carregar-contas', async (event, { usuarioId }) => {
   }
 });
 
+ipcMain.handle('salvar-configuracao-caixinha', async (event, { contaId, caixinhaAtiva, caixinhaSaldoInicial }) => {
+  if (!contaId) return { success: false, error: 'ID da conta não informado' };
+  try {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (typeof caixinhaAtiva === 'boolean') {
+      fields.push(`caixinha_ativa = $${idx++}`);
+      values.push(caixinhaAtiva);
+    }
+
+    if (caixinhaSaldoInicial !== undefined && caixinhaSaldoInicial !== null) {
+      fields.push(`caixinha_saldo_inicial = $${idx++}`);
+      values.push(parseFloat(caixinhaSaldoInicial) || 0);
+    }
+
+    if (fields.length > 0) {
+      values.push(contaId);
+      await pool.query(
+        `UPDATE contas SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao salvar configuração da caixinha no banco:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('salvar-paleta-cores', async (event, { contaId, paletaCores }) => {
+  if (!contaId) return { success: false, error: 'ID da conta não informado' };
+  try {
+    const paletaJson = typeof paletaCores === 'string' ? paletaCores : JSON.stringify(paletaCores);
+    await pool.query('UPDATE contas SET paleta_cores = $1 WHERE id = $2', [paletaJson, contaId]);
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao salvar paleta de cores no banco:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('carregar-paleta-cores', async (event, { contaId }) => {
+  if (!contaId) return { success: false, error: 'ID da conta não informado' };
+  try {
+    const result = await pool.query('SELECT paleta_cores FROM contas WHERE id = $1', [contaId]);
+    if (result.rows.length > 0 && result.rows[0].paleta_cores) {
+      return { success: true, paletaCores: result.rows[0].paleta_cores };
+    }
+    return { success: true, paletaCores: null };
+  } catch (error) {
+    console.error('Erro ao carregar paleta de cores do banco:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('criar-conta', async (event, { usuarioId, nome, tipo, descricao, cor }) => {
   if (!usuarioId || !nome) return { success: false, error: 'Dados da conta inválidos.' };
 
@@ -1041,15 +1541,16 @@ ipcMain.handle('carregar-etiquetas', async (event, { usuarioId }) => {
 
   try {
     const result = await pool.query(
-      'SELECT DISTINCT nome FROM etiquetas WHERE usuario_id = $1 ORDER BY nome ASC',
+      'SELECT nome FROM etiquetas WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
       [usuarioId]
     );
 
     if (!result.rows || result.rows.length === 0) {
+      let idx = 0;
       for (const etiq of ETIQUETAS_PADRAO) {
         await pool.query(
-          'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
-          [usuarioId, etiq]
+          'INSERT INTO etiquetas (usuario_id, nome, ordem) VALUES ($1, $2, $3)',
+          [usuarioId, etiq, idx++]
         );
       }
       return ETIQUETAS_PADRAO;
@@ -1074,6 +1575,37 @@ ipcMain.handle('adicionar-etiqueta', async (event, { usuarioId, nome }) => {
   }
 });
 
+ipcMain.handle('deletar-etiqueta', async (event, { usuarioId, nome }) => {
+  if (!usuarioId || !nome) return { success: false };
+  try {
+    await pool.query(
+      'DELETE FROM etiquetas WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))',
+      [usuarioId, nome]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao deletar etiqueta:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('reordenar-etiquetas', async (event, { usuarioId, ordemEtiquetas }) => {
+  if (!usuarioId || !Array.isArray(ordemEtiquetas)) return { success: false };
+  try {
+    for (let i = 0; i < ordemEtiquetas.length; i++) {
+      const etiqNome = ordemEtiquetas[i];
+      await pool.query(
+        'UPDATE etiquetas SET ordem = $1 WHERE LOWER(TRIM(nome)) = LOWER(TRIM($2)) AND usuario_id = $3',
+        [i, etiqNome, usuarioId]
+      );
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao reordenar etiquetas:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
   if (!usuarioId) return CATEGORIAS_INDIVIDUAL;
 
@@ -1091,19 +1623,20 @@ ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
     const catPadrao = getCategoriasPadrao(perfilUso);
 
     const result = await pool.query(
-      'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY id ASC',
+      'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
       [usuarioId]
     );
 
     if (result.rows.length === 0) {
+      let idx = 0;
       for (const cat of catPadrao) {
         await pool.query(
-          'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
-          [usuarioId, cat.nome, cat.cor]
+          'INSERT INTO categorias (usuario_id, nome, cor, ordem) VALUES ($1, $2, $3, $4)',
+          [usuarioId, cat.nome, cat.cor, idx++]
         );
       }
       const newResult = await pool.query(
-        'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY id ASC',
+        'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
         [usuarioId]
       );
       return newResult.rows;
@@ -1120,13 +1653,32 @@ ipcMain.handle('adicionar-categoria', async (event, { usuarioId, nome, cor }) =>
   if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   try {
+    const maxOrd = await pool.query('SELECT COALESCE(MAX(ordem), 0) as max_ord FROM categorias WHERE usuario_id = $1', [usuarioId]);
+    const proxOrdem = (parseInt(maxOrd.rows[0]?.max_ord, 10) || 0) + 1;
+
     await pool.query(
-      'INSERT INTO categorias (usuario_id, nome, cor) VALUES ($1, $2, $3)',
-      [usuarioId, nome.trim(), cor || '#ffe192']
+      'INSERT INTO categorias (usuario_id, nome, cor, ordem) VALUES ($1, $2, $3, $4)',
+      [usuarioId, nome.trim(), cor || '#ffe192', proxOrdem]
     );
     return { success: true };
   } catch (error) {
     console.error('Erro ao adicionar categoria:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('reordenar-categorias', async (event, { usuarioId, ordemIds }) => {
+  if (!usuarioId || !Array.isArray(ordemIds)) return { success: false };
+  try {
+    for (let i = 0; i < ordemIds.length; i++) {
+      await pool.query(
+        'UPDATE categorias SET ordem = $1 WHERE id = $2 AND usuario_id = $3',
+        [i, ordemIds[i], usuarioId]
+      );
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao reordenar categorias:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1151,13 +1703,21 @@ ipcMain.handle('carregar-transacoes', async (event, { usuarioId, contaId, mes, a
 
   try {
     const filtrarMes = mes && mes !== 'Todos';
+    const filtrarAno = ano && ano !== 'Todos';
     const filtrarConta = !!contaId;
 
-    let sqlReceitas = 'SELECT * FROM receitas WHERE usuario_id = $1 AND ano = $2';
-    let sqlDespesas = 'SELECT * FROM despesas WHERE usuario_id = $1 AND ano = $2';
-    const args = [usuarioId, ano];
+    let sqlReceitas = 'SELECT * FROM receitas WHERE usuario_id = $1';
+    let sqlDespesas = 'SELECT * FROM despesas WHERE usuario_id = $1';
+    const args = [usuarioId];
 
-    let paramIndex = 3;
+    let paramIndex = 2;
+    if (filtrarAno) {
+      sqlReceitas += ` AND ano = $${paramIndex}`;
+      sqlDespesas += ` AND ano = $${paramIndex}`;
+      args.push(ano);
+      paramIndex++;
+    }
+
     if (filtrarConta) {
       sqlReceitas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
       sqlDespesas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
@@ -1342,6 +1902,7 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
       const mesInicioIndex = mesesList.indexOf(mesOrigem) !== -1 ? mesesList.indexOf(mesOrigem) : dataFinal.getMonth();
       const mesFimIndex = novaTransacao.mesFimRecorrencia ? mesesList.indexOf(novaTransacao.mesFimRecorrencia) : 11;
       const limiteMes = mesFimIndex !== -1 ? mesFimIndex : 11;
+      const anoFim = novaTransacao.anoFimRecorrencia ? parseInt(novaTransacao.anoFimRecorrencia, 10) : anoInicio;
 
       const diaOriginal = dataFinal.getDate();
       const horaOriginal = dataFinal.getHours();
@@ -1372,7 +1933,8 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
           ]
         );
 
-        if (m === limiteMes) break;
+        if (anoAtualLoop === anoFim && m === limiteMes) break;
+        if (anoAtualLoop > anoFim) break;
 
         m++;
         if (m > 11) {
@@ -1573,6 +2135,60 @@ ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, 
   }
 });
 
+// IMPORTAR TRANSAÇÕES DO NUBANK EM LOTE (CSV)
+ipcMain.handle('importar-transacoes-nubank-csv', async (event, { usuarioId, contaId, transacoes = [] }) => {
+  if (!usuarioId || !Array.isArray(transacoes) || transacoes.length === 0) {
+    return { success: false, error: 'Parâmetros inválidos ou lista de transações vazia.' };
+  }
+
+  const client = await pool.connect();
+  let inseridosCount = 0;
+
+  try {
+    await client.query('BEGIN');
+
+    await salvarEtiquetaSeNova(usuarioId, 'Cartão Nubank');
+
+    for (const item of transacoes) {
+      if (item.isDuplicado) continue;
+
+      const tabela = item.tipo === 'receitas' ? 'receitas' : 'despesas';
+      const valorNum = parseFloat(item.valor || 0);
+      const cat = item.classificacao || 'Nubank';
+      const etiq = item.etiqueta || 'Cartão Nubank';
+      const dtTransacao = item.dataTransacao ? new Date(item.dataTransacao) : new Date();
+
+      await client.query(
+        `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
+        [
+          usuarioId,
+          contaId || null,
+          (item.nome || item.nomeRaw || 'Transação Nubank').trim(),
+          valorNum,
+          cat,
+          etiq,
+          item.parcelas || '1/1',
+          'Importado via CSV Nubank',
+          item.mes,
+          item.ano,
+          dtTransacao,
+        ]
+      );
+      inseridosCount++;
+    }
+
+    await client.query('COMMIT');
+    return { success: true, inseridosCount };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao importar CSV do Nubank em lote:', error);
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+});
+
 // EXPORTAR RELATÓRIO EM CSV (EXCEL)
 ipcMain.handle('exportar-csv', async (event, { dados, mes, ano }) => {
   try {
@@ -1609,10 +2225,20 @@ ipcMain.handle('exportar-csv', async (event, { dados, mes, ano }) => {
   }
 });
 
+// Helper para sanitizar strings contra injecao de HTML em relatorios PDF
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // EXPORTAR RELATÓRIO EXECUTIVO EM PDF
 ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList = [], categorias = [], mes, ano, totalReceitas = 0, totalDespesas = 0, economia = 0, usuarioNome = '' }) => {
   try {
-    const defaultFilename = `Relatorio_Executivo_${mes}_${ano}.pdf`;
+    const defaultFilename = `Relatorio_Executivo_${escapeHtml(mes)}_${escapeHtml(ano)}.pdf`;
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: 'Salvar Relatório Executivo em PDF',
       defaultPath: defaultFilename,
@@ -1656,7 +2282,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
       categoriasHTML = categoriasComValor.slice(0, 4).map((c) => `
         <div class="cat-item">
           <div class="cat-header">
-            <span>${c.nome}</span>
+            <span>${escapeHtml(c.nome)}</span>
             <span>R$ ${c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${c.porcentagem}%)</span>
           </div>
           <div class="cat-bar-bg">
@@ -1685,9 +2311,9 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
             ${receitasList.map((r) => `
               <tr>
                 <td>${r.data_transacao ? new Date(r.data_transacao).toLocaleString('pt-BR') : ''}</td>
-                <td><strong>${r.nome}</strong></td>
-                <td>${r.classificacao || 'Salário & Ganhos'}</td>
-                <td><span class="badge-tag">${r.etiqueta || 'Geral'}</span></td>
+                <td><strong>${escapeHtml(r.nome)}</strong></td>
+                <td>${escapeHtml(r.classificacao || 'Salário & Ganhos')}</td>
+                <td><span class="badge-tag">${escapeHtml(r.etiqueta || 'Geral')}</span></td>
                 <td>${r.eh_fixa === 1 ? 'Fixa' : 'Recorrente'}</td>
                 <td class="val-rec" style="text-align: right;">R$ ${Number(r.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               </tr>
@@ -1717,10 +2343,10 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
             ${despesasList.map((d) => `
               <tr>
                 <td>${d.data_transacao ? new Date(d.data_transacao).toLocaleString('pt-BR') : ''}</td>
-                <td><strong>${d.nome}</strong></td>
-                <td>${d.classificacao || 'Outros'}</td>
-                <td><span class="badge-tag">${d.etiqueta || 'Geral'}</span></td>
-                <td>${d.eh_fixa === 1 ? 'Fixa' : (d.parcelas || '1/1')}</td>
+                <td><strong>${escapeHtml(d.nome)}</strong></td>
+                <td>${escapeHtml(d.classificacao || 'Outros')}</td>
+                <td><span class="badge-tag">${escapeHtml(d.etiqueta || 'Geral')}</span></td>
+                <td>${d.eh_fixa === 1 ? 'Fixa' : escapeHtml(d.parcelas || '1/1')}</td>
                 <td class="val-desp" style="text-align: right;">R$ ${Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               </tr>
             `).join('')}
@@ -1835,7 +2461,7 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
         ${despesasRows}
 
         <div class="footer">
-          Documento gerado automaticamente pelo aplicativo Gestor de Orçamento • Página 1 de 1
+          Documento gerado automaticamente pelo aplicativo Simple Finances • Página 1 de 1
         </div>
       </body>
       </html>
@@ -1858,16 +2484,30 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
 });
 
 const createWindow = () => {
-  const iconPng = path.resolve(process.cwd(), 'images/app_icon.png');
-  const iconJpg = path.resolve(process.cwd(), 'images/app_icon.jpg');
-  const finalIcon = fs.existsSync(iconPng) ? iconPng : iconJpg;
+  const iconCandidates = [
+    path.join(process.resourcesPath || '', 'images', 'app_icon.png'),
+    path.join(process.resourcesPath || '', 'images', 'app_icon.ico'),
+    path.join(app.getAppPath(), 'images', 'app_icon.png'),
+    path.join(app.getAppPath(), 'images', 'app_icon.ico'),
+    path.join(__dirname, '..', '..', 'images', 'app_icon.png'),
+    path.join(__dirname, '..', '..', 'images', 'app_icon.ico'),
+    path.resolve(process.cwd(), 'images/app_icon.png'),
+    path.resolve(process.cwd(), 'images/app_icon.ico'),
+  ];
+  let finalIcon = undefined;
+  for (const candidate of iconCandidates) {
+    if (fs.existsSync(candidate)) {
+      finalIcon = candidate;
+      break;
+    }
+  }
 
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1280,
     minHeight: 850,
-    title: 'Gestor de Orçamento',
+    title: 'Simple Finances',
     icon: finalIcon,
     autoHideMenuBar: true,
     webPreferences: {
@@ -1875,7 +2515,18 @@ const createWindow = () => {
     },
   });
 
-  mainWindow.setTitle('Gestor de Orçamento');
+  if (finalIcon) {
+    try {
+      const img = nativeImage.createFromPath(finalIcon);
+      if (!img.isEmpty()) {
+        mainWindow.setIcon(img);
+      }
+    } catch (err) {
+      console.error('Erro ao definir icone nativeImage:', err);
+    }
+  }
+
+  mainWindow.setTitle('Simple Finances');
   mainWindow.setMenu(null);
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -1899,9 +2550,116 @@ const createWindow = () => {
   });
 };
 
+function criarSplashWindow(finalIcon) {
+  const splash = new BrowserWindow({
+    width: 480,
+    height: 300,
+    frame: false,
+    transparent: false,
+    resizable: false,
+    center: true,
+    alwaysOnTop: true,
+    icon: finalIcon,
+    backgroundColor: '#1e1e1e',
+    show: true,
+    webPreferences: { nodeIntegration: false, contextBridge: true },
+  });
+
+  const splashHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; user-select: none; }
+        body {
+          background-color: #1e1e1e;
+          color: #ffffff;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          padding: 30px;
+          border: 2px solid #333333;
+          border-radius: 14px;
+        }
+        .logo { font-size: 26px; font-weight: bold; color: #ffe192; margin-bottom: 6px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .sub { font-size: 13px; color: #aaaaaa; margin-bottom: 28px; }
+        .bar-container { width: 100%; height: 12px; background: #2d2d2d; border-radius: 10px; overflow: hidden; position: relative; margin-bottom: 16px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
+        .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffe192, #fb8500); border-radius: 10px; transition: width 0.4s ease-out; }
+        .status { font-size: 12.5px; color: #ffe192; font-weight: 500; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="logo">📊 Simple Finances</div>
+      <div class="sub">Gestão Financeira Pessoal</div>
+      <div class="bar-container">
+        <div id="fill" class="bar-fill"></div>
+      </div>
+      <div id="status" class="status">⚡ Inicializando o aplicativo...</div>
+
+      <script>
+        const fill = document.getElementById('fill');
+        const status = document.getElementById('status');
+
+        const steps = [
+          { p: 25, t: '⚡ Verificando integridade dos arquivos...' },
+          { p: 60, t: '🛡️ Conectando aos bancos de dados e backup...' },
+          { p: 90, t: '🎨 Carregando interface do usuário...' },
+          { p: 100, t: '✅ Inicialização concluída!' }
+        ];
+
+        let idx = 0;
+        const interval = setInterval(() => {
+          if (idx < steps.length) {
+            fill.style.width = steps[idx].p + '%';
+            status.textContent = steps[idx].t;
+            idx++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 80);
+      </script>
+    </body>
+    </html>
+  `;
+
+  splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml)}`);
+  return splash;
+}
+
 app.whenReady().then(async () => {
-  await initDatabase();
+  const iconCandidates = [
+    path.join(process.resourcesPath || '', 'images', 'app_icon.png'),
+    path.join(process.resourcesPath || '', 'images', 'app_icon.ico'),
+    path.join(app.getAppPath(), 'images', 'app_icon.png'),
+    path.join(app.getAppPath(), 'images', 'app_icon.ico'),
+    path.join(__dirname, '..', '..', 'images', 'app_icon.png'),
+    path.join(__dirname, '..', '..', 'images', 'app_icon.ico'),
+    path.resolve(process.cwd(), 'images/app_icon.png'),
+    path.resolve(process.cwd(), 'images/app_icon.ico'),
+  ];
+  let finalIcon = undefined;
+  for (const candidate of iconCandidates) {
+    if (fs.existsSync(candidate)) {
+      finalIcon = candidate;
+      break;
+    }
+  }
+
+  const splash = criarSplashWindow(finalIcon);
+
+  // Garante que o túnel SSH está ativo e escutando antes de inicializar o DB
+  await iniciarTunelSSHSeNecessario();
+
+  // Inicializa DB e cria a janela principal do aplicativo
+  initDatabase().catch(err => console.error('Erro no initDatabase:', err));
+
   createWindow();
+  if (splash && !splash.isDestroyed()) {
+    splash.destroy();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1915,3 +2673,4 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+}

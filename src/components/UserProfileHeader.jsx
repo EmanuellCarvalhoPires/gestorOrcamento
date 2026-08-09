@@ -26,10 +26,10 @@ export default function UserProfileHeader() {
 
   const listContas = Array.isArray(contas) ? contas : [];
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (mesParam, anoParam) => {
     setIsDropdownOpen(false);
     setMensagemExport('Exportando planilha Excel...');
-    const res = await exportarCSV();
+    const res = await exportarCSV(mesParam, anoParam);
     if (res?.success) {
       setMensagemExport('✅ Excel exportado com sucesso!');
     } else {
@@ -38,10 +38,10 @@ export default function UserProfileHeader() {
     setTimeout(() => setMensagemExport(''), 4000);
   };
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (mesParam, anoParam) => {
     setIsDropdownOpen(false);
     setMensagemExport('Gerando relatório PDF...');
-    const res = await exportarPDF();
+    const res = await exportarPDF(mesParam, anoParam);
     if (res?.success) {
       setMensagemExport('✅ PDF exportado com sucesso!');
     } else {
@@ -73,15 +73,15 @@ export default function UserProfileHeader() {
       {/* Indicador da Conta Ativa */}
       <div
         style={{
-          backgroundColor: '#3e3e3e',
-          border: '1px solid #737373',
+          backgroundColor: 'var(--surface-bg, #3e3e3e)',
+          border: '1px solid var(--border-color, #737373)',
           padding: '4px 14px',
           borderRadius: '16px',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           fontSize: '12px',
-          color: '#ffffff',
+          color: 'var(--text-primary, #ffffff)',
         }}
       >
         <span
@@ -92,7 +92,7 @@ export default function UserProfileHeader() {
             backgroundColor: contaAtiva?.cor || (isComercial ? '#fb8500' : '#2a9d8f'),
           }}
         />
-        <span style={{ fontWeight: 'bold', color: '#ffe192' }}>
+        <span style={{ fontWeight: 'bold', color: 'var(--accent-color, #ffe192)' }}>
           {contaAtiva?.nome || 'Conta Principal'}
         </span>
       </div>
@@ -104,11 +104,11 @@ export default function UserProfileHeader() {
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: '#3e3e3e',
-          border: '1px solid #737373',
+          backgroundColor: 'var(--surface-bg, #3e3e3e)',
+          border: '1px solid var(--border-color, #737373)',
           padding: '6px 14px',
           borderRadius: '20px',
-          color: '#ffffff',
+          color: 'var(--text-primary, #ffffff)',
           cursor: 'pointer',
           transition: 'background-color 0.2s',
         }}
@@ -118,8 +118,8 @@ export default function UserProfileHeader() {
             width: '28px',
             height: '28px',
             borderRadius: '50%',
-            backgroundColor: '#ffe192',
-            color: '#333333',
+            backgroundColor: 'var(--accent-color, #ffe192)',
+            color: 'var(--accent-text, #333333)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -130,7 +130,7 @@ export default function UserProfileHeader() {
           {usuarioLogado.nome ? usuarioLogado.nome.charAt(0).toUpperCase() : 'U'}
         </div>
         <span style={{ fontSize: '14px', fontWeight: '500' }}>{usuarioLogado.nome}</span>
-        <span style={{ fontSize: '10px', color: '#aaaaaa' }}>▼</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-secondary, #aaaaaa)' }}>▼</span>
       </button>
 
       {/* Dropdown Menu de Perfil e Múltiplas Contas */}
@@ -140,7 +140,7 @@ export default function UserProfileHeader() {
             position: 'absolute',
             top: '48px',
             right: 0,
-            backgroundColor: '#545454',
+            backgroundColor: 'var(--card-bg, #545454)',
             borderRadius: '16px',
             padding: '10px 0',
             width: '260px',
@@ -151,7 +151,7 @@ export default function UserProfileHeader() {
           }}
         >
           {/* SEÇÃO: Minhas Contas */}
-          <div style={{ padding: '8px 16px 4px 16px', fontSize: '11px', color: '#ffe192', fontWeight: 'bold', textTransform: 'uppercase' }}>
+          <div style={{ padding: '8px 16px 4px 16px', fontSize: '11px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', textTransform: 'uppercase' }}>
             Minhas Contas ({listContas.length})
           </div>
 
@@ -166,12 +166,14 @@ export default function UserProfileHeader() {
                     selecionarConta(c);
                     setIsDropdownOpen(false);
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #666666)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ehAtiva ? 'var(--surface-bg, #666666)' : 'transparent')}
                   style={{
                     width: '100%',
                     padding: '8px 16px',
-                    backgroundColor: ehAtiva ? '#666666' : 'transparent',
+                    backgroundColor: ehAtiva ? 'var(--surface-bg, #666666)' : 'transparent',
                     border: 'none',
-                    color: ehAtiva ? '#ffe192' : '#ffffff',
+                    color: ehAtiva ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                     textAlign: 'left',
                     fontSize: '13px',
                     cursor: 'pointer',
@@ -182,11 +184,11 @@ export default function UserProfileHeader() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: c.cor || '#ffe192' }} />
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: c.cor || 'var(--accent-color, #ffe192)' }} />
                     <span style={{ fontWeight: ehAtiva ? 'bold' : 'normal' }}>{c.nome}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '10px', color: '#aaaaaa' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-secondary, #aaaaaa)' }}>
                       {ehCom ? '🏢 Comercial' : '👤 Individual'}
                     </span>
                     {ehAtiva && <span style={{ color: '#2a9d8f', fontWeight: 'bold' }}>✓</span>}
@@ -196,7 +198,7 @@ export default function UserProfileHeader() {
             })}
           </div>
 
-          <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--border-color, #666666)', margin: '4px 0' }} />
 
           {/* Configurações */}
           <button
@@ -208,7 +210,7 @@ export default function UserProfileHeader() {
               padding: '8px 16px',
               backgroundColor: 'transparent',
               border: 'none',
-              color: '#ffffff',
+              color: 'var(--text-primary, #ffffff)',
               textAlign: 'left',
               fontSize: '13px',
               cursor: 'pointer',
@@ -216,13 +218,13 @@ export default function UserProfileHeader() {
               alignItems: 'center',
               gap: '8px',
             }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #666666)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <span>⚙️</span> Configurações
           </button>
 
-          <div style={{ height: '1px', backgroundColor: '#666666', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--border-color, #666666)', margin: '4px 0' }} />
 
           {/* Sair da Conta */}
           <button
@@ -243,8 +245,8 @@ export default function UserProfileHeader() {
               alignItems: 'center',
               gap: '8px',
             }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#666666')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #666666)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <span>🚪</span> Sair da Conta
           </button>

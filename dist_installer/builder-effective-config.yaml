@@ -1,0 +1,30 @@
+directories:
+  output: dist_installer
+  buildResources: build
+appId: com.simplefinances.app
+productName: Simple Finances
+files:
+  - filter:
+      - .vite/**/*
+      - package.json
+extraResources:
+  - filter:
+      - images/**/*
+      - ssh-key-2026-07-30.key
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: images/app_icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Simple Finances
+  installerIcon: images/app_icon.ico
+  uninstallerIcon: images/app_icon.ico
+  uninstallDisplayName: Simple Finances
+  runAfterFinish: true
+electronVersion: 43.2.0

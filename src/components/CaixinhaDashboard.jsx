@@ -122,7 +122,7 @@ export default function CaixinhaDashboard() {
   return (
     <div
       style={{
-        backgroundColor: '#545454',
+        backgroundColor: 'var(--card-bg, #545454)',
         borderRadius: '16px',
         padding: '20px',
         display: 'flex',
@@ -133,15 +133,14 @@ export default function CaixinhaDashboard() {
         width: '100%',
       }}
     >
-      {/* Cabeçalho com Seletor de Modo de Visão e Dropdown de Horizonte em Ambos os Modos */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <span style={{ fontSize: '24px', flexShrink: 0 }}>📦</span>
           <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: 0, color: '#ffe192', fontSize: '17px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <h3 style={{ margin: 0, color: 'var(--accent-color, #ffe192)', fontSize: '17px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {isComercial ? 'Reserva de Lucros Corporativa' : 'Caixinha Acumulada'}
             </h3>
-            <span style={{ color: '#dddddd', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+            <span style={{ color: 'var(--text-secondary, #dddddd)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
               {modoCaixinhaVisao === 'atual'
                 ? `Exibindo faturas fechadas (${opcaoHorizonte.label}).`
                 : `Projeção futura (${opcaoHorizonte.label}).`}
@@ -149,17 +148,15 @@ export default function CaixinhaDashboard() {
           </div>
         </div>
 
-        {/* Grupo de Ações do Topo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {/* Seletor de Modos de Visão (Saldo Atual vs Projeção Futura) */}
           <div
             style={{
               display: 'flex',
               gap: '4px',
-              backgroundColor: '#3e3e3e',
+              backgroundColor: 'var(--surface-bg, #3e3e3e)',
               padding: '3px',
               borderRadius: '12px',
-              border: '1px solid #666666',
+              border: '1px solid var(--border-color, #666666)',
             }}
           >
             <button
@@ -169,8 +166,8 @@ export default function CaixinhaDashboard() {
                 padding: '6px 12px',
                 borderRadius: '9px',
                 border: 'none',
-                backgroundColor: modoCaixinhaVisao === 'atual' ? '#ffe192' : 'transparent',
-                color: modoCaixinhaVisao === 'atual' ? '#333333' : '#dddddd',
+                backgroundColor: modoCaixinhaVisao === 'atual' ? 'var(--accent-color, #ffe192)' : 'transparent',
+                color: modoCaixinhaVisao === 'atual' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #dddddd)',
                 fontWeight: 'bold',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -188,8 +185,8 @@ export default function CaixinhaDashboard() {
                 padding: '6px 12px',
                 borderRadius: '9px',
                 border: 'none',
-                backgroundColor: modoCaixinhaVisao === 'projetada' ? '#ffe192' : 'transparent',
-                color: modoCaixinhaVisao === 'projetada' ? '#333333' : '#dddddd',
+                backgroundColor: modoCaixinhaVisao === 'projetada' ? 'var(--accent-color, #ffe192)' : 'transparent',
+                color: modoCaixinhaVisao === 'projetada' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #dddddd)',
                 fontWeight: 'bold',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -202,14 +199,13 @@ export default function CaixinhaDashboard() {
             </button>
           </div>
 
-          {/* Dropdown de Horizonte Presente em Ambos os Modos */}
           <select
             value={horizontePrevisao}
             onChange={(e) => setHorizontePrevisao(e.target.value)}
             style={{
-              backgroundColor: '#3e3e3e',
-              color: '#ffe192',
-              border: '1px solid #ffe192',
+              backgroundColor: 'var(--surface-bg, #3e3e3e)',
+              color: 'var(--accent-color, #ffe192)',
+              border: '1px solid var(--accent-color, #ffe192)',
               borderRadius: '10px',
               padding: '6px 12px',
               fontSize: '12px',
@@ -221,7 +217,7 @@ export default function CaixinhaDashboard() {
             }}
           >
             {opcoesAtivas.map((opt) => (
-              <option key={opt.value} value={opt.value} style={{ backgroundColor: '#2e2e2e', color: '#ffffff' }}>
+              <option key={opt.value} value={opt.value} style={{ backgroundColor: 'var(--card-bg, #2e2e2e)', color: 'var(--text-primary, #ffffff)' }}>
                 {opt.label}
               </option>
             ))}
@@ -229,13 +225,12 @@ export default function CaixinhaDashboard() {
         </div>
       </div>
 
-      {/* Banner Principal do Saldo da Caixinha / Reserva de Lucros */}
       <div
         style={{
-          backgroundColor: '#3e3e3e',
+          backgroundColor: 'var(--surface-bg, #3e3e3e)',
           padding: '20px 24px',
           borderRadius: '16px',
-          border: '1px solid #ffe192',
+          border: '1px solid var(--accent-color, #ffe192)',
           boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
           display: 'flex',
           alignItems: 'center',
@@ -245,19 +240,15 @@ export default function CaixinhaDashboard() {
         }}
       >
         <div>
-          <span style={{ fontSize: '13px', color: '#dddddd', fontWeight: 'bold', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary, #dddddd)', fontWeight: 'bold', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             {isComercial
               ? (modoCaixinhaVisao === 'atual' ? '💰 Saldo em Reserva de Lucros' : '📊 Saldo Projetado da Reserva')
-              : (modoCaixinhaVisao === 'atual' ? '💰 Saldo Atual Guardado na Caixinha' : '📊 Saldo Projetado Total da Caixinha')}
+              : (modoCaixinhaVisao === 'atual' ? '💰 Saldo Atual Guardado na Caixinha' : '📊 Saldo Futuro Projetado da Caixinha')}
           </span>
-          <span style={{ fontSize: '12px', color: '#aaaaaa', marginTop: '2px', display: 'block' }}>
-            {isComercial
-              ? (modoCaixinhaVisao === 'atual'
-                ? `Resultado líquido acumulado das faturas encerradas (${opcaoHorizonte.label})`
-                : `Resultado líquido acumulado projetado (${opcaoHorizonte.label})`)
-              : (modoCaixinhaVisao === 'atual'
-                ? `Valor consolidado das economias das faturas encerradas (${opcaoHorizonte.label})`
-                : `Valor projetado considerando a extensão (${opcaoHorizonte.label})`)}
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginTop: '2px' }}>
+            {modoCaixinhaVisao === 'atual'
+              ? `Valor consolidado das economias das faturas encerradas (${opcaoHorizonte.label})`
+              : `Valor projetado considerando a extensão (${opcaoHorizonte.label})`}
           </span>
         </div>
 
@@ -265,7 +256,7 @@ export default function CaixinhaDashboard() {
           style={{
             fontSize: '28px',
             fontWeight: '800',
-            color: saldoFinalCaixinha >= 0 ? '#ffe192' : '#ff8585',
+            color: saldoFinalCaixinha >= 0 ? 'var(--accent-color, #ffe192)' : '#ff8585',
             letterSpacing: '0.5px',
           }}
         >
@@ -273,16 +264,15 @@ export default function CaixinhaDashboard() {
         </span>
       </div>
 
-      {/* Histórico Cronológico por Mês/Ano */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <h4 style={{ margin: 0, color: '#ffffff', fontSize: '15px', fontWeight: 'bold' }}>
+        <h4 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '15px', fontWeight: 'bold' }}>
           📊 {isComercial ? 'Evolução da Reserva' : 'Evolução da Caixinha'} ({modoCaixinhaVisao === 'atual' ? `Faturas Fechadas: ${opcaoHorizonte.label}` : `Projeção: ${opcaoHorizonte.label}`})
         </h4>
 
-        <div style={{ overflowY: 'auto', maxHeight: '340px', borderRadius: '12px', border: '1px solid #666666' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', color: '#ffffff', textAlign: 'left', fontSize: '13px' }}>
+        <div style={{ overflowY: 'auto', maxHeight: '340px', borderRadius: '12px', border: '1px solid var(--border-color, #666666)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-primary, #ffffff)', textAlign: 'left', fontSize: '13px' }}>
             <thead>
-              <tr style={{ backgroundColor: '#3e3e3e', color: '#ffe192' }}>
+              <tr style={{ backgroundColor: 'var(--header-bg, #3e3e3e)', color: 'var(--accent-color, #ffe192)' }}>
                 <th style={{ padding: '12px 14px' }}>Mês / Ano</th>
                 <th style={{ padding: '12px 14px' }}>Status</th>
                 <th style={{ padding: '12px 14px' }}>{isComercial ? 'Faturamento' : 'Receitas'}</th>
@@ -294,13 +284,13 @@ export default function CaixinhaDashboard() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: '#aaaaaa' }}>
+                  <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary, #aaaaaa)' }}>
                     Carregando histórico da Caixinha...
                   </td>
                 </tr>
               ) : historicoProcessado.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: '#aaaaaa' }}>
+                  <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary, #aaaaaa)' }}>
                     Nenhum lançamento registrado no histórico.
                   </td>
                 </tr>
@@ -309,12 +299,12 @@ export default function CaixinhaDashboard() {
                   <tr
                     key={`${item.ano}-${item.mes}`}
                     style={{
-                      backgroundColor: index % 2 === 0 ? '#4d4d4d' : '#444444',
-                      borderBottom: '1px solid #5a5a5a',
+                      backgroundColor: index % 2 === 0 ? 'var(--surface-bg, #4d4d4d)' : 'var(--card-bg, #444444)',
+                      borderBottom: '1px solid var(--border-color, #5a5a5a)',
                       opacity: item.somaNesteModo ? 1 : 0.6,
                     }}
                   >
-                    <td style={{ padding: '12px 14px', fontWeight: 'bold', color: '#ffe192' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 'bold', color: 'var(--accent-color, #ffe192)' }}>
                       {item.mes} / {item.ano}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
@@ -323,22 +313,22 @@ export default function CaixinhaDashboard() {
                           🔒 Fechada
                         </span>
                       ) : (
-                        <span style={{ color: modoCaixinhaVisao === 'projetada' ? '#ffe192' : '#aaaaaa', backgroundColor: modoCaixinhaVisao === 'projetada' ? '#4c4228' : '#363636', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: modoCaixinhaVisao === 'projetada' ? 'bold' : 'normal' }}>
+                        <span style={{ color: modoCaixinhaVisao === 'projetada' ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #aaaaaa)', backgroundColor: modoCaixinhaVisao === 'projetada' ? 'rgba(255, 225, 146, 0.15)' : 'var(--surface-bg, #363636)', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: modoCaixinhaVisao === 'projetada' ? 'bold' : 'normal' }}>
                           {modoCaixinhaVisao === 'projetada' ? '📊 Projetada' : '⏳ Em Aberto'}
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '12px 14px', color: '#ffffff' }}>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-primary, #ffffff)' }}>
                       R$ {formatarMoeda(item.receitasNum)}
                     </td>
-                    <td style={{ padding: '12px 14px', color: '#ffffff' }}>
+                    <td style={{ padding: '12px 14px', color: 'var(--text-primary, #ffffff)' }}>
                       R$ {formatarMoeda(item.despesasNum)}
                     </td>
                     <td
                       style={{
                         padding: '12px 14px',
                         fontWeight: 'bold',
-                        color: item.economia > 0 ? '#2a9d8f' : item.economia < 0 ? '#ff8585' : '#aaaaaa',
+                        color: item.economia > 0 ? '#2a9d8f' : item.economia < 0 ? '#ff8585' : 'var(--text-secondary, #aaaaaa)',
                       }}
                     >
                       {item.economia > 0 ? '+' : ''}R$ {formatarMoeda(item.economia)}
@@ -348,7 +338,7 @@ export default function CaixinhaDashboard() {
                         padding: '12px 14px',
                         fontWeight: 'bold',
                         textAlign: 'right',
-                        color: item.somaNesteModo ? (item.saldoResultante >= 0 ? '#ffe192' : '#ff8585') : '#888888',
+                        color: item.somaNesteModo ? (item.saldoResultante >= 0 ? 'var(--accent-color, #ffe192)' : '#ff8585') : 'var(--text-secondary, #888888)',
                       }}
                     >
                       {item.somaNesteModo ? `R$ ${formatarMoeda(item.saldoResultante)}` : '—'}

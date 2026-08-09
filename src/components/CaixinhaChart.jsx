@@ -106,7 +106,7 @@ export default function CaixinhaChart() {
     return (
       <div
         style={{
-          backgroundColor: '#666666',
+          backgroundColor: 'var(--card-bg, #666666)',
           borderRadius: '16px',
           padding: '24px 16px',
           display: 'flex',
@@ -162,7 +162,7 @@ export default function CaixinhaChart() {
   return (
     <div
       style={{
-        backgroundColor: '#666666',
+        backgroundColor: 'var(--card-bg, #666666)',
         borderRadius: '16px',
         padding: '16px 18px',
         display: 'flex',
@@ -209,7 +209,7 @@ export default function CaixinhaChart() {
             const val = isAtual ? item.saldoResultante : item.economia;
             const pct = Math.max(Math.min((Math.abs(val) / maxAbsValue) * 100, 100), 12);
             const isPos = val >= 0;
-            const corBarra = isPos ? (isAtual ? '#ffe192' : '#2a9d8f') : '#ff8585';
+            const corBarra = isPos ? 'var(--accent-color, #ffe192)' : '#ff8585';
 
             return (
               <div

@@ -47,10 +47,10 @@ export default function SummaryCards() {
       {/* Card Receita / Faturamento */}
       <div
         style={{
-          backgroundColor: '#666666',
+          backgroundColor: 'var(--card-bg, #666666)',
           padding: '12px 20px',
           borderRadius: '24px',
-          color: '#ffe192',
+          color: 'var(--accent-color, #ffe192)',
           fontWeight: 'bold',
           fontSize: '15px',
           textAlign: 'center',
@@ -63,10 +63,10 @@ export default function SummaryCards() {
       {/* Card Despesas / Custos */}
       <div
         style={{
-          backgroundColor: '#666666',
+          backgroundColor: 'var(--card-bg, #666666)',
           padding: '12px 20px',
           borderRadius: '24px',
-          color: '#ffe192',
+          color: 'var(--accent-color, #ffe192)',
           fontWeight: 'bold',
           fontSize: '15px',
           textAlign: 'center',
@@ -80,10 +80,10 @@ export default function SummaryCards() {
       {!isCaixinhaAtiva && (
         <div
           style={{
-            backgroundColor: '#666666',
+            backgroundColor: 'var(--card-bg, #666666)',
             padding: '12px 20px',
             borderRadius: '24px',
-            color: '#ffe192',
+            color: 'var(--accent-color, #ffe192)',
             fontWeight: 'bold',
             fontSize: '15px',
             textAlign: 'center',
@@ -98,11 +98,11 @@ export default function SummaryCards() {
       {isCaixinhaAtiva && (
         <div
           style={{
-            backgroundColor: '#3e3e3e',
+            backgroundColor: 'var(--surface-bg, #3e3e3e)',
             padding: '16px 18px',
             borderRadius: '24px',
-            border: '1px solid #ffe192',
-            color: '#ffe192',
+            border: '1px solid var(--accent-color, #ffe192)',
+            color: 'var(--accent-color, #ffe192)',
             fontWeight: 'bold',
             textAlign: 'center',
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -111,10 +111,10 @@ export default function SummaryCards() {
             gap: '6px',
           }}
         >
-          <div style={{ fontSize: '13px', color: '#ffffff', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
             <span>📦</span> {labelCaixinha}:
           </div>
-          <div style={{ fontSize: '20px', fontWeight: '800', color: saldoCaixinhaAcumulado >= 0 ? '#ffe192' : '#ff8585' }}>
+          <div style={{ fontSize: '20px', fontWeight: '800', color: saldoCaixinhaAcumulado >= 0 ? 'var(--accent-color, #ffe192)' : '#ff8585' }}>
             R$ {formatarMoeda(saldoCaixinhaAcumulado)}
           </div>
 
@@ -122,7 +122,7 @@ export default function SummaryCards() {
             style={{
               marginTop: '4px',
               paddingTop: '8px',
-              borderTop: '1px solid #545454',
+              borderTop: '1px solid var(--border-color, #545454)',
               fontSize: '14px',
               fontWeight: 'bold',
               color: economia > 0 ? '#2a9d8f' : economia < 0 ? '#ff8585' : '#aaaaaa',

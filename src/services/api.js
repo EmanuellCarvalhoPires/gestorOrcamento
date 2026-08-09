@@ -246,4 +246,14 @@ export const apiService = {
       body: JSON.stringify({ novaFuncao }),
     });
   },
+
+  async importarTransacoesNubankCSV({ usuarioId, contaId, transacoes }) {
+    if (window.apiTurso?.importarTransacoesNubankCSV) {
+      return window.apiTurso.importarTransacoesNubankCSV({ usuarioId, contaId, transacoes });
+    }
+    return fetchWithAuth('/transacoes/importar-nubank', {
+      method: 'POST',
+      body: JSON.stringify({ usuarioId, contaId, transacoes }),
+    });
+  },
 };

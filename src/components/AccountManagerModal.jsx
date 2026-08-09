@@ -46,7 +46,7 @@ export default function AccountManagerModal({ isOpen, onClose, onCreateAccount }
     >
       <div
         style={{
-          backgroundColor: '#545454',
+          backgroundColor: 'var(--card-bg, #545454)',
           borderRadius: '24px',
           padding: '32px',
           width: '90%',
@@ -55,6 +55,7 @@ export default function AccountManagerModal({ isOpen, onClose, onCreateAccount }
           flexDirection: 'column',
           gap: '20px',
           boxShadow: '0 12px 36px rgba(0,0,0,0.6)',
+          color: 'var(--text-primary, #ffffff)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

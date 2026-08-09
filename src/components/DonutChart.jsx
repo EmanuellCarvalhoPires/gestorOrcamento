@@ -30,7 +30,7 @@ export default function DonutChart() {
     return (
       <div
         style={{
-          backgroundColor: '#666666',
+          backgroundColor: 'var(--card-bg, #666666)',
           borderRadius: '16px',
           padding: '24px 16px',
           display: 'flex',
@@ -44,7 +44,7 @@ export default function DonutChart() {
           gap: '8px',
         }}
       >
-        <h4 style={{ margin: 0, color: '#ffffff', fontSize: '15px', fontWeight: '500' }}>
+        <h4 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '15px', fontWeight: '500' }}>
           {tituloGrafico}
         </h4>
 
@@ -53,8 +53,8 @@ export default function DonutChart() {
             width: '72px',
             height: '72px',
             borderRadius: '50%',
-            backgroundColor: '#545454',
-            border: '2px dashed #737373',
+            backgroundColor: 'var(--surface-bg, #545454)',
+            border: '2px dashed var(--border-color, #737373)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -66,10 +66,10 @@ export default function DonutChart() {
         </div>
 
         <div>
-          <div style={{ color: '#ffe192', fontWeight: 'bold', fontSize: '15px' }}>
+          <div style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', fontSize: '15px' }}>
             Gráfico Indisponível
           </div>
-          <div style={{ color: '#dddddd', fontSize: '12px', marginTop: '4px' }}>
+          <div style={{ color: 'var(--text-secondary, #dddddd)', fontSize: '12px', marginTop: '4px' }}>
             {mensagemVazio}
           </div>
         </div>
@@ -98,7 +98,7 @@ export default function DonutChart() {
   return (
     <div
       style={{
-        backgroundColor: '#666666',
+        backgroundColor: 'var(--card-bg, #666666)',
         borderRadius: '16px',
         padding: '16px',
         display: 'flex',
@@ -110,7 +110,7 @@ export default function DonutChart() {
         minHeight: '235px',
       }}
     >
-      <h4 style={{ margin: '0 0 12px 0', color: '#ffffff', fontSize: '15px', fontWeight: '500' }}>
+      <h4 style={{ margin: '0 0 12px 0', color: 'var(--text-primary, #ffffff)', fontSize: '15px', fontWeight: '500' }}>
         {tituloGrafico}
       </h4>
 
@@ -145,14 +145,14 @@ export default function DonutChart() {
             width: '90px',
             height: '90px',
             borderRadius: '50%',
-            backgroundColor: '#666666',
+            backgroundColor: 'var(--card-bg, #666666)',
           }}
         />
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
         {dadosExibicao.map((item, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#ffffff' }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-primary, #ffffff)' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.cor }} />
             <span>{item.nome} {item.porcentagem}%</span>
           </div>

@@ -1,23 +1,28 @@
+const path = require('path');
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 module.exports = {
   packagerConfig: {
-    name: 'GestorOrcamento',
-    productName: 'Gestor de Orçamento',
+    name: 'SimpleFinances',
+    productName: 'Simple Finances',
+    icon: path.resolve(__dirname, 'images/app_icon.ico'),
+    extraResource: ['./images', './ssh-key-2026-07-30.key'],
     asar: true,
     overwrite: true,
-    prune: false,
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'gestororcamento',
+        name: 'simplefinances',
         authors: 'Emanuell Carvalho Pires',
-        description: 'Aplicativo de Gestão de Orçamento Financeiro',
-        setupExe: 'GestorOrcamento-Instalador.exe',
+        description: 'Simple Finances - Aplicativo de Gestão Financeira Pessoal',
+        setupExe: 'SimpleFinances-Instalador.exe',
+        setupIcon: path.resolve(__dirname, 'images/app_icon.ico'),
+        loadingGif: path.resolve(__dirname, 'images/installing_progress.gif'),
+        noDelta: true,
       },
     },
     {
@@ -63,7 +68,7 @@ module.exports = {
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],
