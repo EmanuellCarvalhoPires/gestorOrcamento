@@ -1,13 +1,19 @@
+const fs = require('fs');
 const path = require('path');
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+
+const extraResources = ['./images'];
+if (fs.existsSync(path.resolve(__dirname, 'ssh-key-2026-07-30.key'))) {
+  extraResources.push('./ssh-key-2026-07-30.key');
+}
 
 module.exports = {
   packagerConfig: {
     name: 'SimpleFinances',
     productName: 'Simple Finances',
     icon: path.resolve(__dirname, 'images/app_icon.ico'),
-    extraResource: ['./images', './ssh-key-2026-07-30.key'],
+    extraResource: extraResources,
     asar: true,
     overwrite: true,
   },

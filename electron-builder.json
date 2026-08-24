@@ -14,8 +14,7 @@
     "package.json"
   ],
   "extraResources": [
-    "images/**/*",
-    "ssh-key-2026-07-30.key"
+    "images/**/*"
   ],
   "win": {
     "target": [
