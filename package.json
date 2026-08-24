@@ -1,7 +1,7 @@
 {
   "name": "simple-finances",
   "productName": "Simple Finances",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Simple Finances - Gestão Financeira Pessoal",
   "main": ".vite/build/main.js",
   "private": true,
@@ -9,7 +9,10 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "node -e \"try { require('fs').rmSync('out', { recursive: true, force: true }); } catch (e) {}\" && electron-forge make",
+    "build": "vite build",
     "build:nsis": "npx vite build && electron-builder --config electron-builder.json",
+    "dist": "npm run build:nsis",
+    "release": "npx vite build && electron-builder --config electron-builder.json --publish always",
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\""
   },
@@ -40,6 +43,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.8.9",
     "nodemailer": "^9.0.4",
     "pg": "^8.22.0",
     "react": "^19.2.8",

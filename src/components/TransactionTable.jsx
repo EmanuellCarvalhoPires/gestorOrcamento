@@ -12,6 +12,7 @@ export default function TransactionTable() {
     setIsModalOpen,
     totalReceitas,
     totalDespesas,
+    totalReservas = 0,
     isComercial,
     editarTransacao,
     deletarTransacao,
@@ -28,22 +29,33 @@ export default function TransactionTable() {
   };
 
   const renderCategoriaTag = (nomeCat) => {
-    if (!nomeCat) return <span style={{ color: 'var(--text-secondary, #aaaaaa)' }}>—</span>;
+    if (!nomeCat) return <span style={{ color: 'var(--text-secondary, #888888)' }}>—</span>;
     const corCat = getCorCategoria(nomeCat);
     return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          backgroundColor: 'rgba(255, 255, 255, 0.04)',
+          border: `1px solid ${corCat}33`,
+          width: 'fit-content',
+        }}
+      >
         <span
           style={{
-            width: '10px',
-            height: '10px',
+            width: '6px',
+            height: '6px',
             borderRadius: '50%',
             backgroundColor: corCat,
             display: 'inline-block',
-            boxShadow: `0 0 6px ${corCat}aa`,
             flexShrink: 0,
+            opacity: 0.85,
           }}
         />
-        <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: '500' }}>{nomeCat}</span>
+        <span style={{ color: '#d0d0d0', fontWeight: '500', fontSize: '12px' }}>{nomeCat}</span>
       </div>
     );
   };
@@ -67,12 +79,18 @@ export default function TransactionTable() {
   const [itemParaDeletar, setItemParaDeletar] = useState(null);
   const [itemParaDetalhes, setItemParaDetalhes] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [menuAbertoId, setMenuAbertoId] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
   const ordemRef = useRef(null);
+  const menuAcoesRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (ordemRef.current && !ordemRef.current.contains(event.target)) {
         setIsOrdemOpen(false);
+      }
+      if (menuAcoesRef.current && !menuAcoesRef.current.contains(event.target)) {
+        setMenuAbertoId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -287,8 +305,10 @@ export default function TransactionTable() {
   return (
     <div
       style={{
-        backgroundColor: 'var(--card-bg, #545454)',
+        backgroundColor: 'var(--surface-bg, #323232)',
         borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
         padding: '14px 16px',
         display: 'flex',
         flexDirection: 'column',
@@ -296,8 +316,8 @@ export default function TransactionTable() {
         flex: 1,
         width: '100%',
         minWidth: 0,
-        height: '540px',
-        maxHeight: '540px',
+        height: '590px',
+        maxHeight: '590px',
         boxSizing: 'border-box',
         overflow: 'hidden',
       }}
@@ -306,20 +326,20 @@ export default function TransactionTable() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
 
         {/* As 2 Abas Alternadoras */}
-        <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '4px', borderRadius: '24px' }}>
+        <div style={{ display: 'flex', gap: '4px', backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '4px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)' }}>
           <button
             type="button"
             onClick={() => setAbaAtiva('receitas')}
             style={{
-              padding: '8px 20px',
+              padding: '7px 18px',
               borderRadius: '20px',
               border: 'none',
               cursor: 'pointer',
               fontWeight: 'bold',
-              fontSize: '14px',
+              fontSize: '13px',
               backgroundColor: abaAtiva === 'receitas' ? 'var(--accent-color, #ffe192)' : 'transparent',
               color: abaAtiva === 'receitas' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
-              boxShadow: abaAtiva === 'receitas' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
+              boxShadow: abaAtiva === 'receitas' ? '0 2px 8px rgba(0,0,0,0.35)' : 'none',
               transition: 'all 0.2s',
             }}
           >
@@ -330,15 +350,15 @@ export default function TransactionTable() {
             type="button"
             onClick={() => setAbaAtiva('despesas')}
             style={{
-              padding: '8px 20px',
+              padding: '7px 18px',
               borderRadius: '20px',
               border: 'none',
               cursor: 'pointer',
               fontWeight: 'bold',
-              fontSize: '14px',
+              fontSize: '13px',
               backgroundColor: abaAtiva === 'despesas' ? 'var(--accent-color, #ffe192)' : 'transparent',
               color: abaAtiva === 'despesas' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
-              boxShadow: abaAtiva === 'despesas' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
+              boxShadow: abaAtiva === 'despesas' ? '0 2px 8px rgba(0,0,0,0.35)' : 'none',
               transition: 'all 0.2s',
             }}
           >
@@ -356,14 +376,14 @@ export default function TransactionTable() {
               value={buscaTexto}
               onChange={(e) => setBuscaTexto(e.target.value)}
               style={{
-                padding: '8px 30px 8px 14px',
-                borderRadius: '20px',
-                border: '1px solid var(--border-color, #737373)',
-                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                padding: '7px 28px 7px 12px',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                backgroundColor: 'rgba(0, 0, 0, 0.25)',
                 color: 'var(--text-primary, #ffffff)',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 outline: 'none',
-                width: '150px',
+                width: '140px',
               }}
             />
             {buscaTexto && (
@@ -373,12 +393,12 @@ export default function TransactionTable() {
                 title="Limpar busca"
                 style={{
                   position: 'absolute',
-                  right: '10px',
+                  right: '8px',
                   background: 'none',
                   border: 'none',
                   color: 'var(--text-secondary, #aaaaaa)',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '12px',
                 }}
               >
                 ✕
@@ -393,24 +413,24 @@ export default function TransactionTable() {
               onClick={() => setIsOrdemOpen(!isOrdemOpen)}
               title="Ordenar lançamentos"
               style={{
-                padding: '8px 14px',
-                borderRadius: '20px',
-                border: isOrdemOpen ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
-                backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                padding: '7px 12px',
+                borderRadius: '16px',
+                border: isOrdemOpen ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.12)',
+                backgroundColor: 'rgba(0, 0, 0, 0.25)',
                 color: 'var(--accent-color, #ffe192)',
-                fontWeight: 'bold',
+                fontWeight: '600',
                 fontSize: '12px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                height: '35px',
+                height: '33px',
                 userSelect: 'none',
                 transition: 'border 0.2s',
               }}
             >
               <span>{itemOrdemAtual.label}</span>
-              <span style={{ fontSize: '10px', color: 'var(--accent-color, #ffe192)' }}>{isOrdemOpen ? '▲' : '▼'}</span>
+              <span style={{ fontSize: '9px', color: 'var(--accent-color, #ffe192)' }}>{isOrdemOpen ? '▲' : '▼'}</span>
             </button>
 
             {isOrdemOpen && (
@@ -420,9 +440,9 @@ export default function TransactionTable() {
                   top: 'calc(100% + 6px)',
                   right: 0,
                   zIndex: 200,
-                  backgroundColor: 'var(--surface-bg, #2e2e2e)',
-                  border: '1px solid var(--accent-color, #ffe192)',
-                  borderRadius: '14px',
+                  backgroundColor: 'var(--surface-bg, #282828)',
+                  border: '1px solid rgba(255, 225, 146, 0.3)',
+                  borderRadius: '12px',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
                   width: '185px',
                   padding: '4px 0',
@@ -444,9 +464,9 @@ export default function TransactionTable() {
                         padding: '8px 14px',
                         cursor: 'pointer',
                         backgroundColor: isSelected
-                          ? 'rgba(255, 225, 146, 0.2)'
+                          ? 'rgba(255, 225, 146, 0.18)'
                           : isHovered
-                            ? 'rgba(255, 225, 146, 0.1)'
+                            ? 'rgba(255, 225, 146, 0.08)'
                             : 'transparent',
                         color: isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
                         fontSize: '12px',
@@ -472,20 +492,22 @@ export default function TransactionTable() {
             onClick={() => setIsModalOpen(true)}
             title="Adicionar lançamento"
             style={{
-              width: '36px',
-              height: '36px',
+              width: '33px',
+              height: '33px',
               borderRadius: '50%',
               border: 'none',
-              backgroundColor: 'var(--surface-bg, #3e3e3e)',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
               color: 'var(--accent-color, #ffe192)',
               fontWeight: 'bold',
               cursor: 'pointer',
-              fontSize: '20px',
+              fontSize: '18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'transform 0.2s',
+              transition: 'transform 0.15s, background-color 0.15s',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 225, 146, 0.2)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)')}
           >
             +
           </button>
@@ -494,16 +516,21 @@ export default function TransactionTable() {
           <div
             title={
               mesSelecionado === 'Todos'
-                ? (abaAtiva === 'despesas' ? 'Total acumulado de despesas neste ano' : 'Total acumulado de receitas neste ano')
-                : (abaAtiva === 'despesas' ? 'Saldo restante disponível para gastar este mês (Receitas - Despesas)' : 'Total de receitas deste mês')
+                ? (abaAtiva === 'despesas'
+                    ? `Total de despesas no ano: R$ ${totalDespesas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${totalReservas > 0 ? ` (R$ ${totalReservas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em reservas)` : ''}`
+                    : 'Total acumulado de receitas neste ano')
+                : (abaAtiva === 'despesas'
+                    ? `Saldo restante para gastar: R$ ${(totalReceitas - totalDespesas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${totalReservas > 0 ? ` | Valor guardado na Caixinha: R$ ${(totalReceitas - (totalDespesas - totalReservas)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}`
+                    : 'Total de receitas deste mês')
             }
             style={{
-              backgroundColor: 'var(--surface-bg, #3e3e3e)',
-              padding: '8px 20px',
-              borderRadius: '20px',
+              backgroundColor: 'rgba(0, 0, 0, 0.25)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '7px 16px',
+              borderRadius: '16px',
               color: mesSelecionado !== 'Todos' && abaAtiva === 'despesas' && (totalReceitas - totalDespesas) < 0 ? '#ff8585' : 'var(--accent-color, #ffe192)',
               fontWeight: 'bold',
-              fontSize: '16px',
+              fontSize: '15px',
             }}
           >
             R$ {(
@@ -515,23 +542,23 @@ export default function TransactionTable() {
         </div>
       </div>
 
-      {/* Tabela de Lançamentos */}
-      <div style={{ overflowY: 'auto', height: '455px', maxHeight: '455px', borderRadius: '8px' }}>
+      {/* Tabela de Lançamentos com rolagem interna fixa */}
+      <div style={{ overflowY: 'auto', overflowX: 'hidden', height: '505px', maxHeight: '505px', borderRadius: '10px', backgroundColor: 'rgba(0, 0, 0, 0.12)' }}>
         <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', color: 'var(--text-primary, #ffffff)', textAlign: 'left', fontSize: '13px' }}>
           <thead>
-            <tr style={{ backgroundColor: 'var(--header-bg, #666666)', color: 'var(--accent-color, #ffe192)' }}>
-              <th style={{ padding: '10px 12px', width: '110px', borderTopLeftRadius: '6px', whiteSpace: 'nowrap' }}>Data</th>
-              <th style={{ padding: '10px 12px' }}>{labelColunaNome}</th>
-              <th style={{ padding: '10px 12px', width: '120px' }}>Classificação</th>
-              <th style={{ padding: '10px 12px', width: '110px' }}>Etiqueta</th>
-              <th style={{ padding: '10px 12px', width: '130px' }}>
-                {abaAtiva === 'receitas' ? 'Recorrência' : 'Num. de Parcelas'}
+            <tr style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <th style={{ padding: '9px 12px', width: '80px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600', borderTopLeftRadius: '8px', whiteSpace: 'nowrap' }}>Data</th>
+              <th style={{ padding: '9px 12px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>{labelColunaNome}</th>
+              <th style={{ padding: '9px 12px', width: '130px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Classificação</th>
+              <th style={{ padding: '9px 12px', width: '110px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Etiqueta</th>
+              <th style={{ padding: '9px 12px', width: '110px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>
+                {abaAtiva === 'receitas' ? 'Recorrência' : 'Parcelas'}
               </th>
-              <th style={{ padding: '10px 12px', width: '120px' }}>Valor</th>
-              <th style={{ padding: '10px 12px', width: '120px', textAlign: 'center', borderTopRightRadius: '6px' }}>Ações</th>
+              <th style={{ padding: '9px 12px', width: '130px', textAlign: 'right', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Valor</th>
+              <th style={{ padding: '9px 8px', width: '110px', textAlign: 'center', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600', borderTopRightRadius: '8px' }}></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={menuAcoesRef}>
             {transacoesFiltradasPelaBusca.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary, #cccccc)' }}>
@@ -544,11 +571,11 @@ export default function TransactionTable() {
                         type="button"
                         onClick={() => setBuscaTexto('')}
                         style={{
-                          backgroundColor: '#737373',
+                          backgroundColor: 'rgba(255,255,255,0.1)',
                           color: '#ffe192',
-                          border: 'none',
-                          padding: '6px 16px',
-                          borderRadius: '16px',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          padding: '5px 14px',
+                          borderRadius: '14px',
                           cursor: 'pointer',
                           fontWeight: 'bold',
                           fontSize: '12px',
@@ -564,83 +591,172 @@ export default function TransactionTable() {
               itemsProcessados.map((nodo, index) => {
                 if (!nodo.isGroup) {
                   const item = nodo.item;
+                  const isMenuOpen = menuAbertoId === item.id;
+                  const isHovered = hoveredRowId === item.id;
+
                   return (
                     <tr
                       key={item.id}
                       onClick={() => setItemParaDetalhes({ ...item, tipo: abaAtiva })}
+                      onMouseEnter={() => setHoveredRowId(item.id)}
+                      onMouseLeave={() => setHoveredRowId(null)}
                       style={{
-                        backgroundColor: index % 2 === 0 ? 'var(--surface-bg, #5d5d5d)' : 'var(--card-bg, #525252)',
-                        borderBottom: '1px solid var(--border-color, #666666)',
+                        backgroundColor: isMenuOpen
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : index % 2 === 0
+                            ? 'rgba(255, 255, 255, 0.02)'
+                            : 'transparent',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
                         cursor: 'pointer',
-                        transition: 'background-color 0.15s',
-                        color: 'var(--text-primary, #ffffff)',
+                        transition: 'background-color 0.15s ease',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #6e6e6e)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'var(--surface-bg, #5d5d5d)' : 'var(--card-bg, #525252)')}
                     >
                       {/* Coluna Data / Hora */}
-                      <td style={{ padding: '9px 12px', color: 'var(--accent-color, #ffe192)', fontWeight: '500', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '10px 12px', color: '#9e9e9e', fontWeight: '400', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         {formatDataHora(item.data_transacao, item.mes)}
                       </td>
-                      <td style={{ padding: '9px 12px', fontWeight: '500' }}>{item.nome}</td>
-                      <td style={{ padding: '9px 12px' }}>{renderCategoriaTag(item.classificacao)}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary, #dddddd)' }}>{item.etiqueta}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary, #dddddd)', whiteSpace: 'nowrap' }}>
+
+                      {/* Coluna Nome */}
+                      <td style={{ padding: '10px 12px', fontWeight: '600', fontSize: '13.5px', color: '#ffffff' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span>{item.nome}</span>
+                          {(item.eh_reserva === 1 || item.eh_reserva === '1' || item.eh_reserva === true) && (
+                            <span
+                              title="Reserva para Caixinha"
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                backgroundColor: 'rgba(80, 250, 123, 0.1)',
+                                color: '#50fa7b',
+                                border: '1px solid rgba(80, 250, 123, 0.25)',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              Reserva
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Coluna Classificação (Sutil e refinada) */}
+                      <td style={{ padding: '10px 12px' }}>{renderCategoriaTag(item.classificacao)}</td>
+
+                      {/* Coluna Etiqueta */}
+                      <td style={{ padding: '10px 12px', color: '#b0b0b0', fontSize: '12px' }}>{item.etiqueta || '—'}</td>
+
+                      {/* Coluna Parcelas / Recorrência */}
+                      <td style={{ padding: '10px 12px', color: '#b0b0b0', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         {formatarDisplayParcela(item.parcelas, item.eh_fixa)}
                       </td>
-                      <td style={{ padding: '12px 14px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
+
+                      {/* Coluna Valor (Destaque Principal) */}
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--accent-color, #ffe192)', fontWeight: '700', fontSize: '14.5px' }}>
                         R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                          {/* Botão de Ver Detalhes / Editar */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setItemParaDetalhes({ ...item, tipo: abaAtiva });
-                            }}
-                            title="Ver detalhes e editar"
-                            style={{
-                              backgroundColor: 'var(--surface-bg, #3e3e3e)',
-                              border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
-                              borderRadius: '12px',
-                              color: 'var(--accent-color, #ffe192)',
-                              cursor: 'pointer',
-                              padding: '4px 12px',
-                              fontSize: '12px',
-                              fontWeight: 'bold',
-                              transition: 'all 0.15s',
-                            }}
-                          >
-                            Detalhes
-                          </button>
 
-                          {/* Botão de Excluir 🗑️ */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setItemParaDeletar(item);
-                            }}
-                            title="Excluir lançamento"
+                      {/* Coluna Ações (Menu Três Pontinhos contextual no Hover / Clique) */}
+                      <td style={{ padding: '10px 8px', textAlign: 'center', position: 'relative' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuAbertoId(isMenuOpen ? null : item.id);
+                          }}
+                          title="Opções do lançamento"
+                          style={{
+                            background: isMenuOpen ? 'rgba(255, 255, 255, 0.15)' : 'none',
+                            border: 'none',
+                            color: isMenuOpen || isHovered ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.3)',
+                            cursor: 'pointer',
+                            padding: '3px 6px',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: 'bold',
+                            opacity: isHovered || isMenuOpen ? 1 : 0.4,
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          •••
+                        </button>
+
+                        {/* Menu Dropdown Suspenso de Ações */}
+                        {isMenuOpen && (
+                          <div
                             style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
+                              position: 'absolute',
+                              top: 'calc(100% - 4px)',
+                              right: '8px',
+                              zIndex: 150,
+                              backgroundColor: 'var(--surface-bg, #262626)',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              borderRadius: '10px',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                              width: '140px',
                               padding: '4px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
                             }}
                           >
-                            <img
-                              src={iconLixeira}
-                              alt="Excluir"
-                              style={{ width: '18px', height: '18px', objectFit: 'contain' }}
-                            />
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuAbertoId(null);
+                                setItemParaDetalhes({ ...item, tipo: abaAtiva });
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                width: '100%',
+                                padding: '6px 10px',
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--text-primary, #ffffff)',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                borderRadius: '6px',
+                                textAlign: 'left',
+                                transition: 'background-color 0.15s',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                            >
+                              <span>✏️</span> Detalhes / Editar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuAbertoId(null);
+                                setItemParaDeletar(item);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                width: '100%',
+                                padding: '6px 10px',
+                                background: 'none',
+                                border: 'none',
+                                color: '#ff7b7b',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                borderRadius: '6px',
+                                textAlign: 'left',
+                                transition: 'background-color 0.15s',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 80, 80, 0.12)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                            >
+                              <img src={iconLixeira} alt="Excluir" style={{ width: '13px', height: '13px', objectFit: 'contain' }} />
+                              <span>Excluir</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -650,6 +766,7 @@ export default function TransactionTable() {
                 const grupo = nodo;
                 const isExpanded = !!expandedGroups[grupo.groupKey];
                 const isRecorrenteGroup = grupo.tipoGrupo === 'recorrente';
+                const temReserva = grupo.itens.some((i) => i.eh_reserva === 1 || i.eh_reserva === '1' || i.eh_reserva === true);
 
                 const itensOrdenados = [...grupo.itens].sort((a, b) => {
                   if (isRecorrenteGroup) {
@@ -692,82 +809,92 @@ export default function TransactionTable() {
                   }
                 }
 
-                let badgeLabel = `🛒 ${countItens} compras agrupadas`;
+                let badgeLabel = `${countItens} compras`;
+                let tipoLabelSingular = 'meses';
                 if (isRecorrenteGroup) {
-                  badgeLabel = `🔄 ${countItens} meses recorrentes`;
+                  badgeLabel = `Recorrente (${countItens} meses)`;
+                  tipoLabelSingular = 'meses';
                 } else if (isRealParceladoGroup) {
-                  badgeLabel = `📦 ${countItens} parcelas unificadas`;
+                  badgeLabel = `Parcelado (${countItens}x)`;
+                  tipoLabelSingular = 'parcelas';
                 } else if (abaAtiva === 'receitas') {
-                  badgeLabel = `💰 ${countItens} receitas agrupadas`;
+                  badgeLabel = `Recorrente (${countItens} meses)`;
+                  tipoLabelSingular = 'meses';
                 }
 
-                let subpanelTitle = `📋 Compras agrupadas de "${grupo.nome}":`;
-                if (isRecorrenteGroup) {
-                  subpanelTitle = `📋 Gastos recorrentes de "${grupo.nome}":`;
-                } else if (isRealParceladoGroup) {
-                  subpanelTitle = `📋 Parcelas de "${grupo.nome}":`;
-                } else if (abaAtiva === 'receitas') {
-                  subpanelTitle = `📋 Receitas agrupadas de "${grupo.nome}":`;
-                }
+                let subpanelTitle = isRecorrenteGroup
+                  ? `Lançamentos Mensais de "${grupo.nome}"`
+                  : isRealParceladoGroup
+                  ? `Parcelas de "${grupo.nome}"`
+                  : `Lançamentos de "${grupo.nome}"`;
 
-                let toggleText = `▼ Ver ${countItens} compras`;
-                if (isRecorrenteGroup) {
-                  toggleText = `▼ Ver ${countItens} meses`;
-                } else if (isRealParceladoGroup) {
-                  toggleText = `▼ Ver ${countItens} parcelas`;
-                } else if (abaAtiva === 'receitas') {
-                  toggleText = `▼ Ver ${countItens} receitas`;
-                }
+                let toggleTextOpen = `Ver ${countItens} ${tipoLabelSingular}`;
+                let toggleTextClose = `Ocultar ${tipoLabelSingular}`;
 
                 return (
                   <React.Fragment key={grupo.groupKey}>
                     <tr
                       onClick={(e) => toggleGroup(grupo.groupKey, e)}
                       style={{
-                        backgroundColor: isExpanded ? 'var(--header-bg, #3e3e3e)' : (index % 2 === 0 ? 'var(--surface-bg, #3e3e3e)' : 'var(--card-bg, #545454)'),
-                        borderBottom: isExpanded ? 'none' : '1px solid var(--border-color, #666666)',
-                        borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid var(--accent-color, #ffe192)',
+                        backgroundColor: isExpanded
+                          ? 'rgba(255, 255, 255, 0.04)'
+                          : (index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent'),
+                        borderBottom: isExpanded ? 'none' : '1px solid rgba(255, 255, 255, 0.04)',
                         cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        color: 'var(--text-primary, #ffffff)',
+                        transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.08))')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isExpanded ? 'var(--header-bg, #3e3e3e)' : (index % 2 === 0 ? 'var(--surface-bg, #3e3e3e)' : 'var(--card-bg, #545454)'))}
                     >
-                      <td style={{ padding: '9px 12px', color: 'var(--accent-color, #ffe192)', fontWeight: '500', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '10px 12px', color: '#9e9e9e', fontWeight: '400', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         {dataDisplay}
                       </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 'bold' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)' }}>{isExpanded ? '▲' : '▼'}</span>
+                      <td style={{ padding: '10px 12px', fontWeight: '600', fontSize: '13.5px', color: '#ffffff' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--accent-color, #ffe192)', opacity: 0.8 }}>{isExpanded ? '▲' : '▼'}</span>
                           <span>{grupo.nome}</span>
                           <span
                             style={{
-                              fontSize: '10px',
-                              backgroundColor: isRecorrenteGroup ? '#2a9d8f' : (isRealParceladoGroup ? '#e76f51' : 'var(--accent-color, #ffe192)'),
-                              color: (isRecorrenteGroup || isRealParceladoGroup) ? '#ffffff' : 'var(--accent-text, #333333)',
-                              padding: '2px 8px',
-                              borderRadius: '10px',
-                              fontWeight: 'bold',
+                              fontSize: '10.5px',
+                              backgroundColor: isRecorrenteGroup ? 'rgba(80, 250, 123, 0.1)' : 'rgba(255, 225, 146, 0.12)',
+                              color: isRecorrenteGroup ? '#50fa7b' : 'var(--accent-color, #ffe192)',
+                              border: isRecorrenteGroup ? '1px solid rgba(80, 250, 123, 0.25)' : '1px solid rgba(255, 225, 146, 0.25)',
+                              padding: '1px 6px',
+                              borderRadius: '5px',
+                              fontWeight: '600',
                               whiteSpace: 'nowrap',
                             }}
                           >
                             {badgeLabel}
                           </span>
+                          {temReserva && (
+                            <span
+                              title="Reserva para Caixinha"
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                backgroundColor: 'rgba(80, 250, 123, 0.1)',
+                                color: '#50fa7b',
+                                border: '1px solid rgba(80, 250, 123, 0.25)',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              Reserva
+                            </span>
+                          )}
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px' }}>{renderCategoriaTag(grupo.classificacao)}</td>
-                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary, #dddddd)' }}>{grupo.etiqueta}</td>
-                      <td style={{ padding: '12px 14px', color: isRecorrenteGroup ? '#2a9d8f' : 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
+                      <td style={{ padding: '10px 12px' }}>{renderCategoriaTag(grupo.classificacao)}</td>
+                      <td style={{ padding: '10px 12px', color: '#b0b0b0', fontSize: '12px' }}>{grupo.etiqueta || '—'}</td>
+                      <td style={{ padding: '10px 12px', color: isRecorrenteGroup ? '#50fa7b' : '#b0b0b0', fontSize: '12px', fontWeight: isRecorrenteGroup ? '600' : 'normal' }}>
                         {parcelasRange}
                       </td>
-                      <td style={{ padding: '12px 14px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--accent-color, #ffe192)', fontWeight: '700', fontSize: '14.5px' }}>
                         R$ {valorTotalGrupo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        <div style={{ fontSize: '10px', color: 'var(--text-secondary, #aaaaaa)', fontWeight: 'normal' }}>
+                        <div style={{ fontSize: '10.5px', color: '#9e9e9e', fontWeight: 'normal', marginTop: '1px' }}>
                           ({countItens}x de R$ {valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -775,140 +902,127 @@ export default function TransactionTable() {
                             toggleGroup(grupo.groupKey, e);
                           }}
                           style={{
-                            backgroundColor: isExpanded ? 'var(--accent-color, #ffe192)' : 'var(--surface-bg, #3e3e3e)',
-                            color: isExpanded ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
-                            border: '1px solid var(--border-color, #737373)',
-                            borderRadius: '10px',
-                            padding: '6px 14px',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
+                            backgroundColor: isExpanded ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.08)',
+                            color: isExpanded ? '#333333' : '#cccccc',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            fontWeight: '600',
                             cursor: 'pointer',
-                            transition: 'all 0.15s',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {isExpanded ? '▲ Ocultar' : toggleText}
+                          {isExpanded ? toggleTextClose : toggleTextOpen}
                         </button>
                       </td>
                     </tr>
 
-                    {/* Sub-Linha Dropdown com Todos os Registros Individuais */}
+                    {/* Sub-Linha Dropdown com Registros Individuais Limpos e Compactos */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan="7" style={{ padding: '0 0 12px 0', backgroundColor: 'var(--card-bg, #3e3e3e)', borderBottom: '1px solid var(--border-color, #666666)' }}>
+                        <td colSpan="7" style={{ padding: '0 0 12px 0', backgroundColor: 'rgba(0, 0, 0, 0.15)', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
                           <div
                             style={{
-                              padding: '12px 16px',
+                              padding: '10px 14px',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '6px',
-                              borderLeft: isRecorrenteGroup ? '4px solid #2a9d8f' : '4px solid var(--accent-color, #ffe192)',
+                              gap: '4px',
                               marginLeft: '12px',
                               marginRight: '12px',
-                              marginTop: '8px',
-                              backgroundColor: 'var(--surface-bg, #2e2e2e)',
-                              borderRadius: '12px',
-                              boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.4)',
+                              marginTop: '4px',
+                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                              borderRadius: '10px',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
                             }}
                           >
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: isRecorrenteGroup ? '#2a9d8f' : 'var(--accent-color, #ffe192)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-secondary, #cccccc)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
                               {subpanelTitle}
                             </div>
-                            {itensOrdenados.map((subItem) => (
-                              <div
-                                key={subItem.id}
-                                onClick={() => setItemParaDetalhes({ ...subItem, tipo: abaAtiva })}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '8px 14px',
-                                  backgroundColor: 'var(--card-bg, #3e3e3e)',
-                                  borderRadius: '8px',
-                                  border: '1px solid var(--border-color, #545454)',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  transition: 'background-color 0.15s',
-                                }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #505050)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--card-bg, #3e3e3e)')}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                  <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', minWidth: '45px' }}>
-                                    {formatDataHora(subItem.data_transacao, subItem.mes)}
-                                  </span>
-                                  <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: 'bold' }}>
-                                    {subItem.nome}
-                                  </span>
-                                  <span
-                                    style={{
-                                      color: isRecorrenteGroup ? '#ffffff' : 'var(--accent-color, #ffe192)',
-                                      backgroundColor: isRecorrenteGroup ? '#2a9d8f' : 'var(--surface-bg, #3e3e3e)',
-                                      border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
-                                      padding: '2px 8px',
-                                      borderRadius: '10px',
-                                      fontSize: '11px',
-                                      fontWeight: 'bold',
-                                    }}
-                                  >
-                                    {isRecorrenteGroup
-                                      ? `Recorrente (${subItem.mes || 'Mês'})`
-                                      : isRealParceladoGroup
-                                        ? formatarDisplayParcela(subItem.parcelas, subItem.eh_fixa)
-                                        : (abaAtiva === 'receitas' ? 'Receita' : 'Compra')}
-                                  </span>
-                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary, #cccccc)' }}>
-                                    {renderCategoriaTag(subItem.classificacao)}
-                                    <span>• {subItem.etiqueta}</span>
+                            {itensOrdenados.map((subItem, subIdx) => {
+                              const mesNome = subItem.mes || (subItem.data_transacao ? formatDataHora(subItem.data_transacao).split('/')[1] : '');
+                              const identificadorLinha = isRecorrenteGroup
+                                ? (mesNome ? `Mês de ${mesNome}` : `Lançamento ${subIdx + 1}`)
+                                : isRealParceladoGroup
+                                ? formatarDisplayParcela(subItem.parcelas, subItem.eh_fixa)
+                                : `Item ${subIdx + 1}`;
+
+                              return (
+                                <div
+                                  key={subItem.id}
+                                  onClick={() => setItemParaDetalhes({ ...subItem, tipo: abaAtiva })}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 12px',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255, 255, 255, 0.03)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    transition: 'background-color 0.15s ease',
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.07)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)')}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <span style={{ color: '#8e8e8e', minWidth: '45px', fontSize: '11.5px' }}>
+                                      {formatDataHora(subItem.data_transacao, subItem.mes)}
+                                    </span>
+                                    <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: '600', fontSize: '12px' }}>
+                                      {identificadorLinha}
+                                    </span>
+                                    {(subItem.eh_reserva === 1 || subItem.eh_reserva === '1' || subItem.eh_reserva === true) && (
+                                      <span
+                                        title="Reserva para Caixinha"
+                                        style={{
+                                          fontSize: '9.5px',
+                                          fontWeight: '600',
+                                          backgroundColor: 'rgba(80, 250, 123, 0.1)',
+                                          color: '#50fa7b',
+                                          border: '1px solid rgba(80, 250, 123, 0.25)',
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                        }}
+                                      >
+                                        Reserva
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <span style={{ color: 'var(--text-primary, #ffffff)', fontWeight: '600', fontSize: '12.5px' }}>
+                                      R$ {Number(subItem.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemParaDeletar(subItem);
+                                      }}
+                                      title="Excluir lançamento"
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        opacity: 0.5,
+                                        transition: 'opacity 0.15s ease',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.5')}
+                                    >
+                                      <img src={iconLixeira} alt="Excluir" style={{ width: '13px', height: '13px', objectFit: 'contain' }} />
+                                    </button>
                                   </div>
                                 </div>
-
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold', fontSize: '13px' }}>
-                                    R$ {Number(subItem.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                  </span>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setItemParaDetalhes({ ...subItem, tipo: abaAtiva });
-                                    }}
-                                    style={{
-                                      backgroundColor: 'var(--surface-bg, #3e3e3e)',
-                                      border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
-                                      borderRadius: '8px',
-                                      color: 'var(--accent-color, #ffe192)',
-                                      cursor: 'pointer',
-                                      padding: '3px 10px',
-                                      fontSize: '11px',
-                                      fontWeight: 'bold',
-                                      transition: 'all 0.15s',
-                                    }}
-                                  >
-                                    Detalhes
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setItemParaDeletar(subItem);
-                                    }}
-                                    title="Excluir lançamento"
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      padding: '2px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                    }}
-                                  >
-                                    <img src={iconLixeira} alt="Excluir" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>

@@ -41,6 +41,9 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
   const [etiqueta, setEtiqueta] = useState('Geral');
   const [dataTransacao, setDataTransacao] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [ehReserva, setEhReserva] = useState(false);
+
+  const isDespesa = !(item?.tipo === 'receitas' || item?.tipo === 'receita');
 
   useEffect(() => {
     if (item) {
@@ -52,6 +55,7 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
       setEtiqueta(item.etiqueta || 'Geral');
       setDataTransacao(getFormattedDateTime(item.data_transacao));
       setDescricao(item.descricao || '');
+      setEhReserva(item.eh_reserva === 1 || item.eh_reserva === '1' || item.eh_reserva === true || Boolean(item.ehReserva));
     }
   }, [item]);
 
@@ -82,6 +86,8 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
       etiqueta,
       dataTransacao,
       descricao,
+      ehReserva: (isDespesa && ehReserva) ? 1 : 0,
+      tipo: item.tipo,
     });
   };
 
@@ -152,6 +158,90 @@ export default function EditExpenseModal({ isOpen, item, onClose, onSave }) {
               required
             />
           </div>
+
+          {/* Finalidade da Despesa (se for despesa) */}
+          {isDespesa && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', fontWeight: 'bold' }}>
+                  Finalidade do Lançamento
+                </label>
+                <span style={{ fontSize: '11px', color: ehReserva ? '#50fa7b' : 'var(--text-secondary, #aaaaaa)', fontStyle: 'italic' }}>
+                  {ehReserva ? '📦 Reserva: Soma na Caixinha' : '🛒 Comum: Gasto real do mês'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEhReserva(false)}
+                  style={{
+                    flex: 1,
+                    height: '38px',
+                    borderRadius: '12px',
+                    border: !ehReserva ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
+                    backgroundColor: !ehReserva ? 'rgba(255, 225, 146, 0.15)' : 'var(--surface-bg, #3e3e3e)',
+                    color: !ehReserva ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #cccccc)',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <span>🛒</span> Despesa Comum
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEhReserva(true)}
+                  style={{
+                    flex: 1,
+                    height: '38px',
+                    borderRadius: '12px',
+                    border: ehReserva ? '2px solid #50fa7b' : '1px solid var(--border-color, #737373)',
+                    backgroundColor: ehReserva ? 'rgba(80, 250, 123, 0.15)' : 'var(--surface-bg, #3e3e3e)',
+                    color: ehReserva ? '#50fa7b' : 'var(--text-secondary, #cccccc)',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <span>📦</span> Reserva para Caixinha
+                </button>
+              </div>
+
+              {ehReserva && (
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: '#50fa7b',
+                    backgroundColor: 'rgba(80, 250, 123, 0.1)',
+                    border: '1px solid rgba(80, 250, 123, 0.3)',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  <span>💡</span>
+                  <span>
+                    Esta despesa reserva orçamento no mês, mas <strong>não subtrai da Caixinha</strong> — ela é adicionada ao "valor a ser guardado".
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Valor + Data e Hora */}
           <div style={{ display: 'flex', gap: '12px' }}>

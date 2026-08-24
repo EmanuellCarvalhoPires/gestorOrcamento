@@ -36,4 +36,22 @@ contextBridge.exposeInMainWorld('apiTurso', {
   deletarUsuarioAdmin: (dados) => ipcRenderer.invoke('deletar-usuario-admin', dados),
   alterarFuncaoUsuarioAdmin: (dados) => ipcRenderer.invoke('alterar-funcao-usuario-admin', dados),
   excluirContaUsuario: (dados) => ipcRenderer.invoke('excluir-conta-usuario', dados),
+  verificarAtualizacao: () => ipcRenderer.invoke('verificar-atualizacao'),
+  abrirUrlExterna: (url) => ipcRenderer.invoke('abrir-url-externa', url),
+  obterVersaoApp: () => ipcRenderer.invoke('obter-versao-app'),
+});
+
+// Bridge de Auto-Update nativo compatível com electron-updater
+contextBridge.exposeInMainWorld('electronAPI', {
+  getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
+  checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:downloadUpdate'),
+  quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
+  openExternalUrl: (url) => ipcRenderer.invoke('abrir-url-externa', url),
+  getAppVersion: () => ipcRenderer.invoke('obter-versao-app'),
+  onUpdateStatus: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('updater:status', handler);
+    return () => ipcRenderer.removeListener('updater:status', handler);
+  },
 });

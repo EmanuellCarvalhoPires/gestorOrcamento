@@ -20,19 +20,19 @@ export const corsMiddleware = cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
-// Rate Limiter Geral para todas as rotas de API (100 req por 15 min)
+// Rate Limiter Geral para todas as rotas de API (1000 req por 15 min - permite múltiplos usuários sob o mesmo IP)
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Muitas requisições deste IP. Tente novamente em 15 minutos.' },
 });
 
-// Rate Limiter Estrito para Login/Registro (30 tentativas por 15 min - Prevenção contra força bruta)
+// Rate Limiter Estrito para Login/Registro (100 tentativas por 15 min - Prevenção contra força bruta)
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Muitas tentativas de autenticação. Tente novamente após 15 minutos.' },

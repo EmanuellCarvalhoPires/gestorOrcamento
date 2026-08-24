@@ -7,6 +7,8 @@ export default function AddExpenseModal() {
   const {
     isModalOpen,
     setIsModalOpen,
+    modalInitialData,
+    setModalInitialData,
     adicionarTransacao,
     categorias,
     etiquetaList,
@@ -20,8 +22,8 @@ export default function AddExpenseModal() {
     setAbaAtiva,
   } = useBudget();
 
-  const labelReceitaTab = isComercial ? '📈 Vendas / Entradas' : '📈 Receita';
-  const labelDespesaTab = isComercial ? '📉 Custos / Saídas' : '📉 Despesa';
+  const labelReceitaTab = isComercial ? 'Vendas / Entradas' : 'Receita';
+  const labelDespesaTab = isComercial ? 'Custos / Saídas' : 'Despesa';
 
   // Helper para formatar a data/hora local atual para o input datetime-local (YYYY-MM-DDTHH:mm)
   const getNowFormatted = () => {
@@ -46,6 +48,7 @@ export default function AddExpenseModal() {
   const [totalParcelas, setTotalParcelas] = useState(1);
   
   const [ehFixa, setEhFixa] = useState(false);
+  const [ehReserva, setEhReserva] = useState(false);
   const [mesFimRecorrencia, setMesFimRecorrencia] = useState('Dez');
   const [anoFimRecorrencia, setAnoFimRecorrencia] = useState(new Date().getFullYear().toString());
   const [descricao, setDescricao] = useState('');
@@ -91,13 +94,44 @@ export default function AddExpenseModal() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Sincroniza o tipo do modal (Receita x Despesa) com a aba ativa da tabela ao abrir o modal
+  // Sincroniza o tipo e dados iniciais ao abrir o modal
   useEffect(() => {
     if (isModalOpen) {
-      setTipo(abaAtiva === 'receitas' || abaAtiva === 'receita' ? 'receita' : 'despesa');
+      if (modalInitialData?.tipo) {
+        setTipo(modalInitialData.tipo);
+      } else {
+        setTipo(abaAtiva === 'receitas' || abaAtiva === 'receita' ? 'receita' : 'despesa');
+      }
+
+      if (modalInitialData?.classificacao) {
+        const catObj = (categorias || []).find(
+          (c) => c.nome?.toLowerCase() === modalInitialData.classificacao.toLowerCase()
+        );
+        setClassificacao(catObj ? catObj.nome : modalInitialData.classificacao);
+      } else {
+        setClassificacao('');
+      }
+
+      if (modalInitialData?.etiqueta) {
+        setEtiqueta(modalInitialData.etiqueta);
+      } else {
+        setEtiqueta('');
+      }
+
+      if (modalInitialData?.nome) {
+        setNome(modalInitialData.nome);
+      } else {
+        setNome('');
+      }
+
       setDataTransacao(getNowFormatted());
     }
-  }, [isModalOpen, abaAtiva]);
+  }, [isModalOpen, abaAtiva, modalInitialData, categorias]);
+
+  const handleCloseModal = () => {
+    if (setModalInitialData) setModalInitialData(null);
+    setIsModalOpen(false);
+  };
 
   // Recálculo automático quando no Modo Frequência
   useEffect(() => {
@@ -249,6 +283,7 @@ export default function AddExpenseModal() {
         parcelaAtual: isParcelado ? (parseInt(parcelaAtual, 10) || 1) : 1,
         totalParcelas: isParcelado ? (parseInt(totalParcelas, 10) || 1) : 1,
         ehFixa,
+        ehReserva: (tipo === 'despesa' && ehReserva) ? 1 : 0,
         mesFimRecorrencia,
         anoFimRecorrencia,
         descricao,
@@ -271,10 +306,11 @@ export default function AddExpenseModal() {
       setParcelaAtual(1);
       setTotalParcelas(1);
       setEhFixa(false);
+      setEhReserva(false);
       setMesFimRecorrencia('Dez');
       setAnoFimRecorrencia(new Date().getFullYear().toString());
       setDescricao('');
-      setIsModalOpen(false);
+      handleCloseModal();
     } finally {
       setIsSubmitting(false);
     }
@@ -321,51 +357,72 @@ export default function AddExpenseModal() {
           color: 'var(--text-primary, #ffffff)',
         }}
       >
-        {/* Topo do Modal com Seleção de Tipo - MESMA ORDEM DA TABELA: Receita à Esquerda, Despesa à Direita */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <h3 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '19px', fontWeight: 'bold' }}>
-            {tituloModal}
-          </h3>
+        {/* Topo do Modal com Título e Toggle Alinhados */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px' }}>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '18px', fontWeight: 'bold' }}>
+              {tituloModal}
+            </h3>
+          </div>
 
-          <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '4px', borderRadius: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '2px', backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '3px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+              <button
+                type="button"
+                onClick={() => handleTipoChange('receita')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  backgroundColor: tipo === 'receita' ? '#2a9d8f' : 'transparent',
+                  color: tipo === 'receita' ? '#ffffff' : '#9e9e9e',
+                  boxShadow: tipo === 'receita' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {labelReceitaTab}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTipoChange('despesa')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  backgroundColor: tipo === 'despesa' ? 'var(--accent-color, #ffe192)' : 'transparent',
+                  color: tipo === 'despesa' ? 'var(--accent-text, #333333)' : '#9e9e9e',
+                  boxShadow: tipo === 'despesa' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {labelDespesaTab}
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => handleTipoChange('receita')}
+              onClick={handleCloseModal}
+              title="Fechar"
               style={{
-                padding: '6px 16px',
-                borderRadius: '16px',
-                border: tipo === 'receita' ? '1px solid var(--accent-color, #ffe192)' : 'none',
+                background: 'none',
+                border: 'none',
+                color: '#aaaaaa',
+                fontSize: '20px',
                 cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: tipo === 'receita' ? 'var(--accent-color, #ffe192)' : 'transparent',
-                color: tipo === 'receita' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
-                boxShadow: tipo === 'receita' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
-                transform: tipo === 'receita' ? 'translateY(-1px)' : 'none',
-                transition: 'all 0.2s ease',
+                lineHeight: 1,
+                padding: '4px',
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#aaaaaa')}
             >
-              {labelReceitaTab}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTipoChange('despesa')}
-              style={{
-                padding: '6px 16px',
-                borderRadius: '16px',
-                border: tipo === 'despesa' ? '1px solid var(--accent-color, #ffe192)' : 'none',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: tipo === 'despesa' ? 'var(--accent-color, #ffe192)' : 'transparent',
-                color: tipo === 'despesa' ? 'var(--accent-text, #333333)' : 'var(--text-secondary, #aaaaaa)',
-                boxShadow: tipo === 'despesa' ? '0 3px 10px rgba(0,0,0,0.35)' : 'none',
-                transform: tipo === 'despesa' ? 'translateY(-1px)' : 'none',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {labelDespesaTab}
+              ✕
             </button>
           </div>
         </div>
@@ -406,28 +463,98 @@ export default function AddExpenseModal() {
             />
           </div>
 
-          {/* 2. Tipo de Lançamento (PRIMEIRO: Define se é Pontual, Recorrente ou Parcelado) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px' }}>Tipo de Lançamento</label>
-              {(hoveredTipo || ehFixa || isParcelado || (!ehFixa && !isParcelado)) && (
-                <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)', fontStyle: 'italic', transition: 'all 0.2s' }}>
-                  {hoveredTipo === 'pontual' || (!hoveredTipo && !ehFixa && !isParcelado)
-                    ? '🎯 Ocorre apenas uma vez nesta data'
-                    : hoveredTipo === 'recorrente' || (!hoveredTipo && ehFixa)
-                    ? '🔄 Repete-se mensalmente na mesma data'
-                    : '💳 Dividido em parcelas nos meses seguintes'}
-                </span>
+          {/* 2. Finalidade da Despesa (Despesa Comum vs Reserva para Caixinha) */}
+          {tipo === 'despesa' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', fontWeight: '500' }}>
+                Finalidade do Lançamento
+              </label>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  title="Despesa tradicional que subtrai do orçamento disponível e reduz o valor guardado/caixinha."
+                  onClick={() => setEhReserva(false)}
+                  style={{
+                    flex: 1,
+                    height: '40px',
+                    borderRadius: '12px',
+                    border: !ehReserva ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    backgroundColor: !ehReserva ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                    color: !ehReserva ? 'var(--accent-text, #333333)' : '#aaaaaa',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease',
+                    boxShadow: !ehReserva ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
+                  }}
+                >
+                  Despesa Comum
+                </button>
+
+                <button
+                  type="button"
+                  title="Reserva um valor do orçamento para economia. Não deduz da Caixinha; soma diretamente no 'valor a ser guardado'."
+                  onClick={() => setEhReserva(true)}
+                  style={{
+                    flex: 1,
+                    height: '40px',
+                    borderRadius: '12px',
+                    border: ehReserva ? '1px solid #50fa7b' : '1px solid rgba(255, 255, 255, 0.08)',
+                    backgroundColor: ehReserva ? '#50fa7b' : 'rgba(255, 255, 255, 0.04)',
+                    color: ehReserva ? '#1e1e1e' : '#aaaaaa',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease',
+                    boxShadow: ehReserva ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
+                  }}
+                >
+                  Reserva para Caixinha
+                </button>
+              </div>
+
+              {ehReserva && (
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: '#50fa7b',
+                    backgroundColor: 'rgba(80, 250, 123, 0.08)',
+                    border: '1px solid rgba(80, 250, 123, 0.25)',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    lineHeight: '1.4',
+                    marginTop: '2px',
+                  }}
+                >
+                  <span>
+                    Esta despesa reserva orçamento no mês, mas <strong>não subtrai da Caixinha</strong> — ela é adicionada ao "valor a ser guardado".
+                  </span>
+                </div>
               )}
             </div>
+          )}
 
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {/* 3. Tipo de Lançamento (Pontual, Recorrente ou Parcelado) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', fontWeight: '500' }}>
+              Tipo de Lançamento
+            </label>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {/* Botão Pontual */}
               <button
                 type="button"
                 title="Lançamento único que ocorre apenas uma vez nesta data especificada (ex: compras à vista, pagamentos pontuais)."
-                onMouseEnter={() => setHoveredTipo('pontual')}
-                onMouseLeave={() => setHoveredTipo(null)}
                 onClick={() => {
                   setEhFixa(false);
                   setIsParcelado(false);
@@ -435,34 +562,30 @@ export default function AddExpenseModal() {
                 }}
                 style={{
                   flex: 1,
-                  minWidth: '120px',
-                  height: '42px',
+                  minWidth: '110px',
+                  height: '40px',
                   borderRadius: '12px',
-                  border: !ehFixa && !isParcelado ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
-                  backgroundColor: !ehFixa && !isParcelado ? 'var(--accent-color, #ffe192)' : 'var(--surface-bg, #3e3e3e)',
-                  color: !ehFixa && !isParcelado ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                  border: !ehFixa && !isParcelado ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  backgroundColor: !ehFixa && !isParcelado ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                  color: !ehFixa && !isParcelado ? 'var(--accent-text, #333333)' : '#aaaaaa',
                   fontSize: '13px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease',
-                  boxShadow: !ehFixa && !isParcelado ? '0 4px 14px rgba(0, 0, 0, 0.4)' : 'none',
-                  transform: !ehFixa && !isParcelado ? 'translateY(-2px)' : 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: !ehFixa && !isParcelado ? '0 2px 8px rgba(0, 0, 0, 0.25)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <span>🎯</span> Pontual
+                Pontual
               </button>
 
               {/* Botão Recorrente */}
               <button
                 type="button"
                 title="Lançamento fixo que se repete automaticamente todos os meses na mesma data (ex: assinatura, aluguel, salário)."
-                onMouseEnter={() => setHoveredTipo('recorrente')}
-                onMouseLeave={() => setHoveredTipo(null)}
                 onClick={() => {
                   setEhFixa(true);
                   setIsParcelado(false);
@@ -470,33 +593,29 @@ export default function AddExpenseModal() {
                 style={{
                   flex: 1,
                   minWidth: '110px',
-                  height: '42px',
+                  height: '40px',
                   borderRadius: '12px',
-                  border: ehFixa ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
-                  backgroundColor: ehFixa ? 'var(--accent-color, #ffe192)' : 'var(--surface-bg, #3e3e3e)',
-                  color: ehFixa ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                  border: ehFixa ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  backgroundColor: ehFixa ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                  color: ehFixa ? 'var(--accent-text, #333333)' : '#aaaaaa',
                   fontSize: '13px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease',
-                  boxShadow: ehFixa ? '0 4px 14px rgba(0, 0, 0, 0.4)' : 'none',
-                  transform: ehFixa ? 'translateY(-2px)' : 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: ehFixa ? '0 2px 8px rgba(0, 0, 0, 0.25)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <span>🔄</span> Recorrente
+                Recorrente
               </button>
 
               {/* Botão Compra Parcelada */}
               <button
                 type="button"
                 title="Compra dividida em número fixo de parcelas (ex: 10x no cartão). O sistema projeta cada parcela nos meses seguintes."
-                onMouseEnter={() => setHoveredTipo('parcelada')}
-                onMouseLeave={() => setHoveredTipo(null)}
                 onClick={() => {
                   setIsParcelado(true);
                   setEhFixa(false);
@@ -504,26 +623,24 @@ export default function AddExpenseModal() {
                 }}
                 style={{
                   flex: 1,
-                  minWidth: '130px',
-                  height: '42px',
+                  minWidth: '120px',
+                  height: '40px',
                   borderRadius: '12px',
-                  border: isParcelado ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
-                  backgroundColor: isParcelado ? 'var(--accent-color, #ffe192)' : 'var(--surface-bg, #3e3e3e)',
-                  color: isParcelado ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                  border: isParcelado ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  backgroundColor: isParcelado ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                  color: isParcelado ? 'var(--accent-text, #333333)' : '#aaaaaa',
                   fontSize: '13px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isParcelado ? '0 4px 14px rgba(0, 0, 0, 0.4)' : 'none',
-                  transform: isParcelado ? 'translateY(-2px)' : 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isParcelado ? '0 2px 8px rgba(0, 0, 0, 0.25)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <span>💳</span> Compra Parcelada
+                Compra Parcelada
               </button>
             </div>
           </div>
@@ -532,8 +649,8 @@ export default function AddExpenseModal() {
           {ehFixa && (
             <div
               style={{
-                backgroundColor: 'var(--surface-bg, #3e3e3e)',
-                border: '1px solid var(--border-color, #666666)',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
                 borderRadius: '16px',
                 padding: '14px 16px',
                 display: 'flex',
@@ -543,7 +660,7 @@ export default function AddExpenseModal() {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
-                  Modo de Cálculo do Valor Recorrente
+                  Modo de Cálculo Recorrente
                 </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
@@ -552,12 +669,13 @@ export default function AddExpenseModal() {
                     style={{
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      border: !isModoFrequencia ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
-                      backgroundColor: !isModoFrequencia ? 'var(--accent-color, #ffe192)' : 'var(--card-bg, #3e3e3e)',
-                      color: !isModoFrequencia ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                      border: !isModoFrequencia ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      backgroundColor: !isModoFrequencia ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                      color: !isModoFrequencia ? 'var(--accent-text, #333333)' : '#aaaaaa',
                       fontSize: '11px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     Valor Fixo Direto
@@ -568,15 +686,16 @@ export default function AddExpenseModal() {
                     style={{
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      border: isModoFrequencia ? '1px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #666666)',
-                      backgroundColor: isModoFrequencia ? 'var(--accent-color, #ffe192)' : 'var(--card-bg, #3e3e3e)',
-                      color: isModoFrequencia ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                      border: isModoFrequencia ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      backgroundColor: isModoFrequencia ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                      color: isModoFrequencia ? 'var(--accent-text, #333333)' : '#aaaaaa',
                       fontSize: '11px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    🧮 Por Frequência (Ex: Café/dia)
+                    Por Frequência
                   </button>
                 </div>
               </div>
@@ -658,10 +777,10 @@ export default function AddExpenseModal() {
                         cursor: 'pointer',
                       }}
                     >
-                      <option value="diario_uteis">💼 Diário - Dias Úteis (Seg a Sex - ~22 dias/mês)</option>
-                      <option value="diario_todos">📅 Diário - Todos os Dias (30 dias/mês)</option>
-                      <option value="semanal">📆 Semanal (X vezes por semana - ~4.33x/mês)</option>
-                      <option value="mensal">🗓️ Mensal (X vezes por mês)</option>
+                      <option value="diario_uteis">Diário - Dias Úteis (Seg a Sex - ~22 dias/mês)</option>
+                      <option value="diario_todos">Diário - Todos os Dias (30 dias/mês)</option>
+                      <option value="semanal">Semanal (X vezes por semana - ~4.33x/mês)</option>
+                      <option value="mensal">Mensal (X vezes por mês)</option>
                     </select>
                   </div>
 
@@ -670,23 +789,17 @@ export default function AddExpenseModal() {
                     style={{
                       fontSize: '12px',
                       color: 'var(--accent-color, #ffe192)',
-                      backgroundColor: 'rgba(0,0,0,0.2)',
+                      backgroundColor: 'rgba(0,0,0,0.25)',
                       padding: '8px 12px',
                       borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
                     }}
                   >
-                    <span>⚡</span>
-                    <span>
-                      Cálculo: <strong>{valorUnitarioFormatado}</strong> × <strong>{qtdOcorrencias}</strong> ({
-                        tipoFrequencia === 'diario_uteis' ? '22 dias úteis' :
-                        tipoFrequencia === 'diario_todos' ? '30 dias' :
-                        tipoFrequencia === 'semanal' ? `${(qtdOcorrencias * 4.33).toFixed(1)}x por mês` :
-                        `${qtdOcorrencias}x por mês`
-                      }) = <strong>{valorFormatado} / mês</strong>
-                    </span>
+                    Cálculo: <strong>{valorUnitarioFormatado}</strong> × <strong>{qtdOcorrencias}</strong> ({
+                      tipoFrequencia === 'diario_uteis' ? '22 dias úteis' :
+                      tipoFrequencia === 'diario_todos' ? '30 dias' :
+                      tipoFrequencia === 'semanal' ? `${(qtdOcorrencias * 4.33).toFixed(1)}x por mês` :
+                      `${qtdOcorrencias}x por mês`
+                    }) = <strong>{valorFormatado} / mês</strong>
                   </div>
                 </div>
               )}
@@ -694,7 +807,7 @@ export default function AddExpenseModal() {
               {/* Mês e Ano Fim da Recorrência (Lado a Lado) */}
               <div style={{ marginTop: '4px' }}>
                 <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '12px', marginBottom: '4px' }}>
-                  🔁 Registrar esta {tipo === 'despesa' ? 'despesa/assinatura' : 'receita'} recorrente até:
+                  Registrar este lançamento recorrente até:
                 </label>
 
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -816,8 +929,8 @@ export default function AddExpenseModal() {
           {isParcelado && (
             <div
               style={{
-                backgroundColor: 'var(--surface-bg, #3e3e3e)',
-                border: '1px solid var(--border-color, #666666)',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
                 borderRadius: '16px',
                 padding: '14px 16px',
                 display: 'flex',
@@ -827,7 +940,7 @@ export default function AddExpenseModal() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
-                  💳 Modo de Cálculo do Parcelamento
+                  Modo de Cálculo do Parcelamento
                 </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
@@ -836,15 +949,16 @@ export default function AddExpenseModal() {
                     style={{
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: modoParcelamento === 'total_compra' ? 'var(--accent-color, #ffe192)' : 'var(--card-bg, #3e3e3e)',
-                      color: modoParcelamento === 'total_compra' ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                      border: modoParcelamento === 'total_compra' ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      backgroundColor: modoParcelamento === 'total_compra' ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                      color: modoParcelamento === 'total_compra' ? 'var(--accent-text, #333333)' : '#aaaaaa',
                       fontSize: '11px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    🧮 Por Valor Total
+                    Por Valor Total
                   </button>
                   <button
                     type="button"
@@ -852,12 +966,13 @@ export default function AddExpenseModal() {
                     style={{
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: modoParcelamento === 'valor_parcela' ? 'var(--accent-color, #ffe192)' : 'var(--card-bg, #3e3e3e)',
-                      color: modoParcelamento === 'valor_parcela' ? 'var(--accent-text, #333333)' : 'var(--text-primary, #ffffff)',
+                      border: modoParcelamento === 'valor_parcela' ? '1px solid var(--accent-color, #ffe192)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      backgroundColor: modoParcelamento === 'valor_parcela' ? 'var(--accent-color, #ffe192)' : 'rgba(255, 255, 255, 0.04)',
+                      color: modoParcelamento === 'valor_parcela' ? 'var(--accent-text, #333333)' : '#aaaaaa',
                       fontSize: '11px',
                       fontWeight: 'bold',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     Valor da Parcela Direto
@@ -982,14 +1097,14 @@ export default function AddExpenseModal() {
               {totalParcelas > 0 && (
                 <div
                   style={{
-                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.25)',
                     padding: '8px 12px',
                     borderRadius: '10px',
                     borderLeft: '3px solid var(--accent-color, #ffe192)',
                   }}
                 >
                   <span style={{ fontSize: '12px', color: 'var(--accent-color, #ffe192)', display: 'block' }}>
-                    💡 Resultará em: <strong>{totalParcelas}x de {(
+                    Resultará em: <strong>{totalParcelas}x de {(
                       modoParcelamento === 'total_compra'
                         ? (valorTotalCompraNumerico / Math.max(1, parseInt(totalParcelas, 10) || 1))
                         : valorParcelaDiretoNumerico
@@ -1000,7 +1115,7 @@ export default function AddExpenseModal() {
             </div>
           )}
 
-          {/* 3. Valor Total (R$) e Data/Hora */}
+          {/* 4. Valor Total (R$) e Data/Hora */}
           <div style={{ display: 'flex', gap: '17px' }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -1009,7 +1124,7 @@ export default function AddExpenseModal() {
                 </label>
                 {(isModoFrequencia || isParcelado) && (
                   <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
-                    {isModoFrequencia ? '⚡ Calculado por Frequência' : '⚡ Calculado das Parcelas'}
+                    {isModoFrequencia ? 'Calculado por Frequência' : 'Calculado das Parcelas'}
                   </span>
                 )}
               </div>
@@ -1039,7 +1154,7 @@ export default function AddExpenseModal() {
             {mesSelecionado === 'Todos' && (
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', marginBottom: '6px' }}>
-                  📅 Data e Hora
+                  Data e Hora
                 </label>
                 <input
                   type="datetime-local"
@@ -1068,26 +1183,14 @@ export default function AddExpenseModal() {
             )}
           </div>
 
-          {/* Classificação / Categoria e Etiqueta Reutilizável */}
+          {/* 5. Categoria e Etiqueta */}
           <div style={{ display: 'flex', gap: '17px' }}>
-            {/* CATEGORIA CUSTOM DROPDOWN */}
+            {/* CATEGORIA DROPDOWN */}
             <div style={{ flex: 1, position: 'relative' }} ref={catRef}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
-                <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>Categoria</label>
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent-color, #ffe192)',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  + Categorias
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
+                <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>
+                  Categoria
+                </label>
               </div>
 
               <div
@@ -1117,13 +1220,12 @@ export default function AddExpenseModal() {
                       return (
                         <span
                           style={{
-                            width: '10px',
-                            height: '10px',
+                            width: '8px',
+                            height: '8px',
                             borderRadius: '50%',
                             backgroundColor: catObj.cor || 'var(--accent-color, #ffe192)',
                             display: 'inline-block',
                             flexShrink: 0,
-                            boxShadow: `0 0 6px ${catObj.cor || '#ffe192'}aa`,
                           }}
                         />
                       );
@@ -1151,7 +1253,7 @@ export default function AddExpenseModal() {
                     border: '1px solid var(--accent-color, #ffe192)',
                     borderRadius: '14px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                    maxHeight: '150px',
+                    maxHeight: '180px',
                     overflowY: 'auto',
                     padding: '6px 0',
                   }}
@@ -1183,19 +1285,37 @@ export default function AddExpenseModal() {
                       >
                         <span
                           style={{
-                            width: '10px',
-                            height: '10px',
+                            width: '8px',
+                            height: '8px',
                             borderRadius: '50%',
                             backgroundColor: cat.cor || 'var(--accent-color, #ffe192)',
                             display: 'inline-block',
                             flexShrink: 0,
-                            boxShadow: `0 0 6px ${cat.cor || '#ffe192'}aa`,
                           }}
                         />
                         <span>{cat.nome}</span>
                       </div>
                     );
                   })}
+
+                  <div
+                    onClick={() => {
+                      setIsCatOpen(false);
+                      setIsCategoryModalOpen(true);
+                    }}
+                    style={{
+                      padding: '9px 14px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: 'var(--accent-color, #ffe192)',
+                      backgroundColor: 'rgba(255, 225, 146, 0.08)',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}
+                  >
+                    + Gerenciar Categorias
+                  </div>
                 </div>
               )}
             </div>
@@ -1204,7 +1324,7 @@ export default function AddExpenseModal() {
             <div style={{ flex: 1, position: 'relative' }} ref={etiqRef}>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
                 <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>
-                  📌 Etiqueta / Tag
+                  Etiqueta
                 </label>
               </div>
 
@@ -1283,7 +1403,7 @@ export default function AddExpenseModal() {
                             setIsEtiqOpen(false);
                           }}
                           style={{
-                            padding: '7px 12px',
+                            padding: '8px 14px',
                             cursor: 'pointer',
                             fontSize: '13px',
                             color: isHovered || isSelected ? 'var(--accent-color, #ffe192)' : 'var(--text-primary, #ffffff)',
@@ -1324,7 +1444,7 @@ export default function AddExpenseModal() {
             </div>
           </div>
 
-          {/* Descrição / Observações (Máx. 200 caracteres) */}
+          {/* 6. Descrição / Observações (Máx. 200 caracteres) */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px' }}>Descrição / Observações (Opcional)</label>
@@ -1356,20 +1476,21 @@ export default function AddExpenseModal() {
           </div>
 
           {/* Botões do Rodapé */}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
             <button
               type="button"
-              onClick={() => setIsModalOpen(false)}
+              onClick={handleCloseModal}
               style={{
                 flex: 1,
                 padding: '12px',
-                borderRadius: '24px',
-                border: 'none',
-                backgroundColor: 'var(--surface-bg, #737373)',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                backgroundColor: 'rgba(255, 255, 255, 0.06)',
                 color: 'var(--text-primary, #ffffff)',
-                fontWeight: 'bold',
-                fontSize: '14px',
+                fontWeight: '600',
+                fontSize: '13px',
                 cursor: 'pointer',
+                transition: 'background-color 0.15s',
               }}
             >
               Cancelar
@@ -1380,7 +1501,7 @@ export default function AddExpenseModal() {
               style={{
                 flex: 1,
                 padding: '12px',
-                borderRadius: '24px',
+                borderRadius: '16px',
                 border: 'none',
                 backgroundColor: isSubmitting ? '#999999' : 'var(--accent-color, #ffe192)',
                 color: isSubmitting ? '#666666' : 'var(--accent-text, #333333)',
@@ -1389,10 +1510,10 @@ export default function AddExpenseModal() {
                 cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 boxShadow: isSubmitting ? 'none' : '0 4px 12px rgba(0,0,0,0.3)',
                 opacity: isSubmitting ? 0.7 : 1,
-                transition: 'all 0.2s ease',
+                transition: 'all 0.15s ease',
               }}
             >
-              {isSubmitting ? '⏳ Salvando...' : 'Salvar Alterações'}
+              {isSubmitting ? 'Salvando...' : 'Salvar Lançamento'}
             </button>
           </div>
         </form>

@@ -4,6 +4,11 @@
   "directories": {
     "output": "dist_installer"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "EmanuellCarvalhoPires",
+    "repo": "gestorOrcamento"
+  },
   "files": [
     ".vite/**/*",
     "package.json"

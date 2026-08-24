@@ -36,6 +36,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
   const [etiqueta, setEtiqueta] = useState('Geral');
   const [dataTransacao, setDataTransacao] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [ehReserva, setEhReserva] = useState(false);
 
   const getFormattedDateTime = (isoOrDate) => {
     if (!isoOrDate) return '';
@@ -56,6 +57,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
       setEtiqueta(item.etiqueta || 'Geral');
       setDataTransacao(getFormattedDateTime(item.data_transacao));
       setDescricao(item.descricao || '');
+      setEhReserva(item.eh_reserva === 1 || item.eh_reserva === '1' || item.eh_reserva === true || Boolean(item.ehReserva));
     }
   }, [item, isOpen]);
 
@@ -86,6 +88,8 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
       etiqueta: etiqueta.trim() || 'Geral',
       dataTransacao,
       descricao,
+      ehReserva: (!isReceita && ehReserva) ? 1 : 0,
+      tipo: item.tipo,
     });
     setModoEdicao(false);
   };
@@ -138,28 +142,20 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
           color: 'var(--text-primary, #ffffff)',
         }}
       >
-        {/* Topo do Modal */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color, #666666)', paddingBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span
-              style={{
-                padding: '4px 10px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: isReceita ? '#2a9d8f' : '#e76f51',
-                color: '#ffffff',
-              }}
-            >
-              {isReceita ? (isComercial ? '🏢 Entrada / Venda' : '🟢 Receita') : (isComercial ? '🏢 Custo / Despesa' : '🔴 Despesa')}
+        {/* Topo do Modal (Sem badge redundante) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-primary, #ffffff)' }}>
+              {modoEdicao ? 'Editar Lançamento' : 'Detalhes do Lançamento'}
             </span>
-            <span style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)', fontWeight: '500' }}>
-              {modoEdicao ? 'Editando Lançamento' : 'Detalhes do Lançamento'}
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary, #aaaaaa)', marginTop: '2px' }}>
+              {isReceita ? (isComercial ? 'Venda / Faturamento' : 'Receita') : (isComercial ? 'Custo / Despesa' : 'Despesa')}
             </span>
           </div>
 
           <button
             onClick={onClose}
+            title="Fechar"
             style={{
               background: 'none',
               border: 'none',
@@ -167,58 +163,66 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               fontSize: '22px',
               cursor: 'pointer',
               lineHeight: 1,
+              padding: '4px',
+              transition: 'color 0.15s ease',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#aaaaaa')}
           >
             ✕
           </button>
         </div>
 
-        {/* MODO VISUALIZAÇÃO (DETALHES COMPLETOS) */}
+        {/* MODO VISUALIZAÇÃO (DETALHES COMPLETOS COM HIERARQUIA REFINADA) */}
         {!modoEdicao ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
             {/* Aviso de Conta Encerrada */}
             {isEncerrada && (
               <div
                 style={{
-                  backgroundColor: '#5a2d2d',
-                  color: '#ffcccc',
+                  backgroundColor: 'rgba(231, 111, 81, 0.15)',
+                  color: '#ffb4a2',
                   padding: '10px 16px',
                   borderRadius: '12px',
-                  fontSize: '13px',
+                  fontSize: '12.5px',
                   fontWeight: 'bold',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  border: '1px solid #e76f51',
+                  border: '1px solid rgba(231, 111, 81, 0.4)',
                 }}
               >
-                <span>🔒</span>
                 <span>Conta Encerrada: Os registros desta fatura estão bloqueados para edição ou exclusão.</span>
               </div>
             )}
             
-            {/* Bloco de Valor em Grande Destaque */}
+            {/* Bloco de Valor e Nome em Grande Destaque */}
             <div
               style={{
-                backgroundColor: 'var(--surface-bg, #383838)',
-                borderRadius: '18px',
-                padding: '20px',
+                backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                borderRadius: '16px',
+                padding: '20px 18px',
                 textAlign: 'center',
-                border: '1px solid var(--border-color, #5d5d5d)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
               }}
             >
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary, #aaaaaa)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                {totalCompraParcelada ? 'Valor desta Parcela' : 'Valor Total do Lançamento'}
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary, #9e9e9e)', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600', marginBottom: '4px' }}>
+                {totalCompraParcelada ? 'Valor desta Parcela' : 'Valor do Lançamento'}
               </div>
               <div
                 style={{
-                  fontSize: '28px',
+                  fontSize: '30px',
                   fontWeight: '800',
-                  color: isReceita ? '#2a9d8f' : 'var(--accent-color, #ffe192)',
+                  color: isReceita ? '#50fa7b' : 'var(--accent-color, #ffe192)',
+                  letterSpacing: '-0.5px',
                 }}
               >
                 R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#ffffff', marginTop: '6px' }}>
+                {item.nome}
               </div>
 
               {/* Se for compra parcelada, exibe o Valor Total da Compra */}
@@ -226,125 +230,184 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                 <div
                   style={{
                     marginTop: '10px',
-                    paddingTop: '10px',
-                    borderTop: '1px dashed var(--border-color, #555555)',
-                    fontSize: '13px',
+                    paddingTop: '8px',
+                    borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
+                    fontSize: '12.5px',
                     color: 'var(--accent-color, #ffe192)',
                     fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
                   }}
                 >
-                  <span>💳</span>
-                  <span>
-                    Valor Total da Compra: R$ {totalCompraParcelada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({totalParcelasNum}x de R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-                  </span>
+                  Total da Compra: R$ {totalCompraParcelada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({totalParcelasNum}x de R$ {Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                 </div>
               )}
             </div>
 
-            {/* Grid de Informações Detalhadas */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-              
-              {/* Nome */}
-              <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)', gridColumn: 'span 2' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>
-                  {isComercial ? (isReceita ? 'Cliente / Produto' : 'Fornecedor / Custo') : 'Nome do Lançamento'}
-                </span>
-                <strong style={{ fontSize: '16px', color: 'var(--text-primary, #ffffff)' }}>{item.nome}</strong>
-              </div>
+            {/* Painel Unificado de Metadados e Informações */}
+            <div
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.18)',
+                borderRadius: '16px',
+                padding: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}
+            >
+              {/* Linha 1: Categoria + Etiqueta */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Categoria
+                  </span>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${corCat}44`,
+                    }}
+                  >
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: corCat, flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#ffffff' }}>
+                      {item.classificacao || 'Outros'}
+                    </span>
+                  </div>
+                </div>
 
-              {/* Data e Hora */}
-              <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>📅 Data e Hora</span>
-                <strong style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)' }}>{dataExtenso}</strong>
-              </div>
-
-              {/* Categoria / Classificação */}
-              <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>🏷️ Categoria</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: corCat }} />
-                  <strong style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)' }}>{item.classificacao || 'Outros'}</strong>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Etiqueta
+                  </span>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      color: '#dddddd',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    {item.etiqueta || 'Geral'}
+                  </span>
                 </div>
               </div>
 
-              {/* Etiqueta / Tag */}
-              <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>📌 Etiqueta / Tag</span>
-                <strong style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)' }}>{item.etiqueta || 'Geral'}</strong>
+              {/* Linha 2: Data e Hora + Recorrência/Parcelas */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '10px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Data e Hora
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#e0e0e0', fontWeight: '500' }}>
+                    {dataExtenso}
+                  </span>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Recorrência / Parcela
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#e0e0e0', fontWeight: '500' }}>
+                    {item.eh_fixa === 1 ? 'Fixa todos os meses' : (!item.parcelas || item.parcelas === '1/1' ? 'À vista' : item.parcelas)}
+                  </span>
+                </div>
               </div>
 
-              {/* Parcelamento / Recorrência */}
-              <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>🔢 Recorrência / Parcela</span>
-                <strong style={{ fontSize: '13px', color: 'var(--text-primary, #ffffff)' }}>
-                  {item.eh_fixa === 1 ? 'Fixa todos os meses' : (item.parcelas || '1/1')}
-                </strong>
-                {totalCompraParcelada && (
-                  <span style={{ fontSize: '11px', color: 'var(--accent-color, #ffe192)', display: 'block', marginTop: '3px', fontWeight: 'bold' }}>
-                    Total: R$ {totalCompraParcelada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {/* Linha 3: Finalidade (se despesa) */}
+              {!isReceita && (
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '10px' }}>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Finalidade
                   </span>
-                )}
-              </div>
+                  <span
+                    style={{
+                      fontSize: '12.5px',
+                      fontWeight: '600',
+                      color: (item.eh_reserva === 1 || item.eh_reserva === '1' || item.eh_reserva === true) ? '#50fa7b' : '#cccccc',
+                    }}
+                  >
+                    {(item.eh_reserva === 1 || item.eh_reserva === '1' || item.eh_reserva === true) ? 'Reserva para Caixinha' : 'Despesa Comum'}
+                  </span>
+                </div>
+              )}
 
               {/* Descrição / Observações */}
               {item.descricao && (
-                <div style={{ backgroundColor: 'var(--surface-bg, #3e3e3e)', padding: '12px 14px', borderRadius: '14px', border: '1px solid var(--border-color, #5d5d5d)', gridColumn: 'span 2' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary, #aaaaaa)', display: 'block', marginBottom: '2px' }}>📝 Descrição / Observações</span>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary, #dddddd)', whiteSpace: 'pre-wrap' }}>{item.descricao}</p>
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '10px' }}>
+                  <span style={{ fontSize: '11px', color: '#9e9e9e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                    Descrição / Observações
+                  </span>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#cccccc', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                    {item.descricao}
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Ações do Rodapé no Modo Visualização */}
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            {/* Ações do Rodapé: Botão Principal de Edição + Botão Secundário/Discreto de Exclusão */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '4px' }}>
               <button
+                type="button"
+                onClick={() => {
+                  onDelete(item);
+                  onClose();
+                }}
+                style={{
+                  padding: '11px 18px',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(255, 107, 107, 0.35)',
+                  backgroundColor: 'transparent',
+                  color: '#ff7b7b',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.12)';
+                  e.currentTarget.style.borderColor = '#ff7b7b';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 107, 107, 0.35)';
+                }}
+              >
+                Excluir Lançamento
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setModoEdicao(true)}
                 style={{
-                  flex: 2,
-                  padding: '12px',
-                  borderRadius: '20px',
+                  flex: 1,
+                  padding: '11px 20px',
+                  borderRadius: '14px',
                   border: 'none',
                   backgroundColor: 'var(--accent-color, #ffe192)',
                   color: 'var(--accent-text, #333333)',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.transform = 'none';
                 }}
               >
-                ✏️ Editar Informações
-              </button>
-
-              <button
-                onClick={() => {
-                  onDelete(item);
-                  onClose();
-                }}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '20px',
-                  border: 'none',
-                  backgroundColor: '#e76f51',
-                  color: '#ffffff',
-                  fontWeight: 'bold',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                }}
-              >
-                🗑️ Excluir
+                Editar Informações
               </button>
             </div>
           </div>
@@ -375,6 +438,66 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               />
             </div>
 
+            {/* Finalidade da Despesa no Modo Edição */}
+            {!isReceita && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ color: 'var(--text-primary, #dddddd)', fontSize: '13px', fontWeight: 'bold' }}>
+                    Finalidade do Lançamento
+                  </label>
+                  <span style={{ fontSize: '11px', color: ehReserva ? '#50fa7b' : 'var(--text-secondary, #aaaaaa)', fontStyle: 'italic' }}>
+                    {ehReserva ? 'Reserva: Soma na Caixinha' : 'Comum: Gasto real do mês'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEhReserva(false)}
+                    style={{
+                      flex: 1,
+                      height: '38px',
+                      borderRadius: '12px',
+                      border: !ehReserva ? '2px solid var(--accent-color, #ffe192)' : '1px solid var(--border-color, #737373)',
+                      backgroundColor: !ehReserva ? 'rgba(255, 225, 146, 0.15)' : 'var(--surface-bg, #3e3e3e)',
+                      color: !ehReserva ? 'var(--accent-color, #ffe192)' : 'var(--text-secondary, #cccccc)',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Despesa Comum
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEhReserva(true)}
+                    style={{
+                      flex: 1,
+                      height: '38px',
+                      borderRadius: '12px',
+                      border: ehReserva ? '2px solid #50fa7b' : '1px solid var(--border-color, #737373)',
+                      backgroundColor: ehReserva ? 'rgba(80, 250, 123, 0.15)' : 'var(--surface-bg, #3e3e3e)',
+                      color: ehReserva ? '#50fa7b' : 'var(--text-secondary, #cccccc)',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Reserva para Caixinha
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Valor + Data e Hora */}
             <div style={{ display: 'flex', gap: '12px' }}>
               <div style={{ flex: 1 }}>
@@ -403,7 +526,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
 
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', marginBottom: '6px' }}>
-                  📅 Data e Hora
+                  Data e Hora
                 </label>
                 <input
                   type="datetime-local"
@@ -479,13 +602,12 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                         return (
                           <span
                             style={{
-                              width: '10px',
-                              height: '10px',
+                              width: '8px',
+                              height: '8px',
                               borderRadius: '50%',
                               backgroundColor: catObj.cor || 'var(--accent-color, #ffe192)',
                               display: 'inline-block',
                               flexShrink: 0,
-                              boxShadow: `0 0 6px ${catObj.cor || '#ffe192'}aa`,
                             }}
                           />
                         );
@@ -545,13 +667,12 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                         >
                           <span
                             style={{
-                              width: '10px',
-                              height: '10px',
+                              width: '8px',
+                              height: '8px',
                               borderRadius: '50%',
                               backgroundColor: cat.cor || 'var(--accent-color, #ffe192)',
                               display: 'inline-block',
                               flexShrink: 0,
-                              boxShadow: `0 0 6px ${cat.cor || '#ffe192'}aa`,
                             }}
                           />
                           <span>{cat.nome}</span>
@@ -566,7 +687,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
               <div style={{ flex: 1, position: 'relative' }} ref={etiqRef}>
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', height: '18px' }}>
                   <label style={{ display: 'block', color: 'var(--text-primary, #dddddd)', fontSize: '13px', lineHeight: '18px' }}>
-                    📌 Etiqueta / Tag
+                    Etiqueta
                   </label>
                 </div>
 
@@ -704,23 +825,24 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                 style={{
                   flex: 1,
                   padding: '12px',
-                  borderRadius: '20px',
-                  border: 'none',
-                  backgroundColor: 'var(--surface-bg, #737373)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
                   color: 'var(--text-primary, #ffffff)',
-                  fontWeight: 'bold',
-                  fontSize: '14px',
+                  fontWeight: '600',
+                  fontSize: '13px',
                   cursor: 'pointer',
+                  transition: 'background-color 0.15s',
                 }}
               >
-                ← Voltar aos Detalhes
+                Voltar
               </button>
               <button
                 type="submit"
                 style={{
                   flex: 1,
                   padding: '12px',
-                  borderRadius: '20px',
+                  borderRadius: '16px',
                   border: 'none',
                   backgroundColor: 'var(--accent-color, #ffe192)',
                   color: 'var(--accent-text, #333333)',
@@ -730,7 +852,7 @@ export default function TransactionDetailsModal({ isOpen, item, onClose, onSave,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 }}
               >
-                💾 Salvar Alterações
+                Salvar Alterações
               </button>
             </div>
           </form>

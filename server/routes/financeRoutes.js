@@ -135,22 +135,47 @@ function getNomeTabela(tipo) {
   return tipo === 'receita' || tipo === 'receitas' ? 'receitas' : 'despesas';
 }
 
-// GET /api/transacoes?tipo=despesas&ano=2026&mes=Jan&contaId=1
+const MESES_LISTA = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+// GET /api/transacoes?tipo=despesas&contaId=14
 router.get('/transacoes', async (req, res) => {
   try {
     const usuarioId = req.user.id;
     const { tipo, contaId } = req.query;
     const tabela = getNomeTabela(tipo);
 
-    let sql = `SELECT id, usuario_id AS "usuarioId", conta_id AS "contaId", descricao, valor, data, categoria, etiqueta, tipo_pagamento AS "tipoPagamento", pago, observacao, anexo, repetir, frequencia FROM ${tabela} WHERE usuario_id = $1`;
+    let sql = `
+      SELECT 
+        id, 
+        usuario_id AS "usuarioId", 
+        conta_id AS "contaId", 
+        COALESCE(NULLIF(nome, ''), NULLIF(descricao, ''), 'Sem descrição') AS descricao,
+        COALESCE(NULLIF(nome, ''), NULLIF(descricao, ''), 'Sem descrição') AS nome,
+        valor, 
+        COALESCE(data::text, TO_CHAR(data_transacao, 'YYYY-MM-DD'), TO_CHAR(criado_em, 'YYYY-MM-DD'), TO_CHAR(created_at, 'YYYY-MM-DD'), '2026-08-17') AS data,
+        COALESCE(mes, 'Ago') AS mes,
+        COALESCE(ano, '2026') AS ano,
+        COALESCE(NULLIF(classificacao, ''), NULLIF(categoria, ''), 'Geral') AS categoria,
+        COALESCE(NULLIF(classificacao, ''), NULLIF(categoria, ''), 'Geral') AS classificacao,
+        COALESCE(NULLIF(etiqueta, ''), 'Geral') AS etiqueta,
+        COALESCE(tipo_pagamento, 'Outros') AS "tipoPagamento",
+        COALESCE(pago, true) AS pago,
+        COALESCE(observacao, descricao, '') AS observacao,
+        COALESCE(anexo, '') AS anexo,
+        COALESCE(repetir, (eh_fixa = 1), false) AS repetir,
+        COALESCE(frequencia, 'mensal') AS frequencia,
+        COALESCE(eh_reserva, 0) AS "ehReserva"
+      FROM ${tabela}
+      WHERE usuario_id = $1
+    `;
     const params = [usuarioId];
 
     if (contaId) {
-      params.push(contaId);
+      params.push(parseInt(contaId, 10));
       sql += ` AND conta_id = $${params.length}`;
     }
 
-    sql += ' ORDER BY data DESC, id DESC';
+    sql += ' ORDER BY COALESCE(data_transacao, data::timestamp, criado_em, created_at) DESC, id DESC';
     const result = await query(sql, params);
     res.json({ success: true, transacoes: result.rows });
   } catch (err) {
@@ -167,9 +192,11 @@ router.post('/transacoes', async (req, res) => {
       tipo,
       contaId,
       descricao,
+      nome,
       valor,
       data,
       categoria,
+      classificacao,
       etiqueta,
       tipoPagamento,
       pago,
@@ -177,40 +204,76 @@ router.post('/transacoes', async (req, res) => {
       anexo,
       repetir,
       frequencia,
+      ehReserva,
+      eh_reserva,
     } = req.body;
 
     const tabela = getNomeTabela(tipo);
+    const titulo = (descricao || nome || 'Sem descrição').trim();
+    const catFinal = (categoria || classificacao || 'Geral').trim();
+    const etiqFinal = (etiqueta || 'Geral').trim();
+    const valorNum = parseFloat(valor) || 0;
+    const dataStr = data || new Date().toISOString().split('T')[0];
+    const dtTransacao = new Date(dataStr + 'T12:00:00');
+    const mesCalculado = MESES_LISTA[dtTransacao.getMonth()] || 'Ago';
+    const anoCalculado = dtTransacao.getFullYear().toString();
+    const ehReservaVal = (ehReserva === 1 || ehReserva === true || eh_reserva === 1 || eh_reserva === true) ? 1 : 0;
+    const ehFixaVal = (repetir === true || repetir === 1) ? 1 : 0;
+    const contaIdFinal = contaId ? parseInt(contaId, 10) : null;
 
     const sql = `
       INSERT INTO ${tabela} (
-        usuario_id, conta_id, descricao, valor, data, categoria, etiqueta, tipo_pagamento, pago, observacao, anexo, repetir, frequencia
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING id, usuario_id AS "usuarioId", conta_id AS "contaId", descricao, valor, data, categoria, etiqueta, tipo_pagamento AS "tipoPagamento", pago, observacao, anexo, repetir, frequencia
+        usuario_id, conta_id, nome, descricao, valor, data, data_transacao, mes, ano, categoria, classificacao, etiqueta, tipo_pagamento, pago, observacao, anexo, repetir, eh_fixa, frequencia, eh_reserva
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      RETURNING 
+        id, 
+        usuario_id AS "usuarioId", 
+        conta_id AS "contaId", 
+        nome AS descricao, 
+        nome,
+        valor, 
+        TO_CHAR(data, 'YYYY-MM-DD') AS data, 
+        categoria, 
+        etiqueta, 
+        tipo_pagamento AS "tipoPagamento", 
+        pago, 
+        observacao, 
+        anexo, 
+        repetir, 
+        frequencia, 
+        eh_reserva AS "ehReserva"
     `;
 
     const params = [
       usuarioId,
-      contaId || null,
-      descricao,
-      parseFloat(valor) || 0,
-      data,
-      categoria || 'Geral',
-      etiqueta || 'Geral',
+      contaIdFinal,
+      titulo,
+      observacao || titulo,
+      valorNum,
+      dataStr,
+      dtTransacao,
+      mesCalculado,
+      anoCalculado,
+      catFinal,
+      catFinal,
+      etiqFinal,
       tipoPagamento || 'Outros',
       pago !== undefined ? pago : true,
       observacao || '',
       anexo || '',
       repetir || false,
+      ehFixaVal,
       frequencia || 'mensal',
+      ehReservaVal,
     ];
 
     const result = await query(sql, params);
 
     // Salvar etiqueta caso seja nova
-    if (etiqueta && etiqueta.trim()) {
+    if (etiqFinal && etiqFinal.trim()) {
       await query('INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
         usuarioId,
-        etiqueta.trim(),
+        etiqFinal.trim(),
       ]);
     }
 
@@ -230,9 +293,11 @@ router.put('/transacoes/:id', async (req, res) => {
       tipo,
       contaId,
       descricao,
+      nome,
       valor,
       data,
       categoria,
+      classificacao,
       etiqueta,
       tipoPagamento,
       pago,
@@ -240,31 +305,68 @@ router.put('/transacoes/:id', async (req, res) => {
       anexo,
       repetir,
       frequencia,
+      ehReserva,
+      eh_reserva,
     } = req.body;
 
     const tabela = getNomeTabela(tipo);
+    const titulo = (descricao || nome || 'Sem descrição').trim();
+    const catFinal = (categoria || classificacao || 'Geral').trim();
+    const etiqFinal = (etiqueta || 'Geral').trim();
+    const valorNum = parseFloat(valor) || 0;
+    const dataStr = data || new Date().toISOString().split('T')[0];
+    const dtTransacao = new Date(dataStr + 'T12:00:00');
+    const mesCalculado = MESES_LISTA[dtTransacao.getMonth()] || 'Ago';
+    const anoCalculado = dtTransacao.getFullYear().toString();
+    const ehReservaVal = (ehReserva === 1 || ehReserva === true || eh_reserva === 1 || eh_reserva === true) ? 1 : 0;
+    const ehFixaVal = (repetir === true || repetir === 1) ? 1 : 0;
+    const contaIdFinal = contaId ? parseInt(contaId, 10) : null;
 
     const sql = `
       UPDATE ${tabela} SET
-        conta_id = $1, descricao = $2, valor = $3, data = $4, categoria = $5, etiqueta = $6,
-        tipo_pagamento = $7, pago = $8, observacao = $9, anexo = $10, repetir = $11, frequencia = $12
-      WHERE id = $13 AND usuario_id = $14
-      RETURNING id, usuario_id AS "usuarioId", conta_id AS "contaId", descricao, valor, data, categoria, etiqueta, tipo_pagamento AS "tipoPagamento", pago, observacao, anexo, repetir, frequencia
+        conta_id = $1, nome = $2, descricao = $3, valor = $4, data = $5, data_transacao = $6, mes = $7, ano = $8,
+        categoria = $9, classificacao = $10, etiqueta = $11, tipo_pagamento = $12, pago = $13,
+        observacao = $14, anexo = $15, repetir = $16, eh_fixa = $17, frequencia = $18, eh_reserva = $19
+      WHERE id = $20 AND usuario_id = $21
+      RETURNING 
+        id, 
+        usuario_id AS "usuarioId", 
+        conta_id AS "contaId", 
+        nome AS descricao, 
+        nome,
+        valor, 
+        TO_CHAR(data, 'YYYY-MM-DD') AS data, 
+        categoria, 
+        etiqueta, 
+        tipo_pagamento AS "tipoPagamento", 
+        pago, 
+        observacao, 
+        anexo, 
+        repetir, 
+        frequencia, 
+        eh_reserva AS "ehReserva"
     `;
 
     const params = [
-      contaId || null,
-      descricao,
-      parseFloat(valor) || 0,
-      data,
-      categoria || 'Geral',
-      etiqueta || 'Geral',
+      contaIdFinal,
+      titulo,
+      observacao || titulo,
+      valorNum,
+      dataStr,
+      dtTransacao,
+      mesCalculado,
+      anoCalculado,
+      catFinal,
+      catFinal,
+      etiqFinal,
       tipoPagamento || 'Outros',
       pago !== undefined ? pago : true,
       observacao || '',
       anexo || '',
       repetir || false,
+      ehFixaVal,
       frequencia || 'mensal',
+      ehReservaVal,
       transacaoId,
       usuarioId,
     ];
@@ -294,6 +396,66 @@ router.delete('/transacoes/:id', async (req, res) => {
   } catch (err) {
     console.error('Erro ao deletar transação:', err);
     res.status(500).json({ success: false, error: 'Erro ao deletar transação.' });
+  }
+});
+
+// POST /api/transacoes/importar-nubank
+router.post('/transacoes/importar-nubank', async (req, res) => {
+  try {
+    const usuarioId = req.user.id;
+    const { contaId, transacoes = [] } = req.body;
+
+    if (!Array.isArray(transacoes) || transacoes.length === 0) {
+      return res.status(400).json({ success: false, error: 'Lista de transações vazia ou inválida.' });
+    }
+
+    let inseridosCount = 0;
+
+    for (const item of transacoes) {
+      if (item.isDuplicado || item.selecionado === false) continue;
+
+      const tabela = item.tipo === 'receitas' ? 'receitas' : 'despesas';
+      const valorNum = parseFloat(item.valor || 0);
+      const cat = item.classificacao || 'Nubank';
+      const etiq = item.etiqueta || 'Nubank';
+      const dtTransacao = item.dataTransacao ? new Date(item.dataTransacao) : new Date();
+      const descCompleta = item.descricao || item.nomeRaw || 'Importado via CSV Nubank';
+      const mesItem = item.mes || MESES_LISTA[dtTransacao.getMonth()] || 'Ago';
+      const anoItem = item.ano || dtTransacao.getFullYear().toString();
+
+      if (etiq && etiq.trim()) {
+        await query('INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+          usuarioId,
+          etiq.trim(),
+        ]);
+      }
+
+      await query(
+        `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, categoria, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao, data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13)`,
+        [
+          usuarioId,
+          contaId ? parseInt(contaId, 10) : null,
+          (item.nome || item.nomeRaw || 'Transação Nubank').trim(),
+          valorNum,
+          cat,
+          cat,
+          etiq,
+          item.parcelas || '1/1',
+          descCompleta,
+          mesItem,
+          anoItem,
+          dtTransacao,
+          dtTransacao.toISOString().split('T')[0],
+        ]
+      );
+      inseridosCount++;
+    }
+
+    res.json({ success: true, inseridosCount });
+  } catch (err) {
+    console.error('Erro ao importar transações do Nubank em lote:', err);
+    res.status(500).json({ success: false, error: 'Erro ao importar transações do Nubank.' });
   }
 });
 

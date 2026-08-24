@@ -176,8 +176,25 @@ export const BudgetProvider = ({ children }) => {
   const isIndividual = !isComercial;
 
   // Filtros de Data e Navegação
-  const [anoSelecionado, setAnoSelecionado] = useState('2026');
-  const [mesSelecionado, setMesSelecionado] = useState('Jan');
+  const [anoSelecionado, setAnoSelecionadoState] = useState('2026');
+  const ultimoAnoValidoRef = useRef('2026');
+
+  const setAnoSelecionado = (novoAno) => {
+    if (novoAno && novoAno !== 'caixinha') {
+      ultimoAnoValidoRef.current = novoAno;
+    }
+    setAnoSelecionadoState(novoAno);
+  };
+
+  const [mesSelecionado, setMesSelecionadoState] = useState('Jan');
+
+  const setMesSelecionado = (novoMes) => {
+    if (anoSelecionado === 'caixinha') {
+      setAnoSelecionadoState(ultimoAnoValidoRef.current || '2026');
+    }
+    setMesSelecionadoState(novoMes);
+  };
+
   const [abaAtiva, setAbaAtiva] = useState('despesas'); // 'receitas' ou 'despesas'
 
   // Transações, Categorias e Etiquetas Reutilizáveis
@@ -190,8 +207,106 @@ export const BudgetProvider = ({ children }) => {
   const [isCaixinhaAtiva, setIsCaixinhaAtiva] = useState(false);
   const [saldoInicialCaixinha, setSaldoInicialCaixinha] = useState(0);
   const [saldoCaixinhaAcumulado, setSaldoCaixinhaAcumulado] = useState(0);
+  const [caixinhaRendimentoTaxa, setCaixinhaRendimentoTaxa] = useState(0);
+  const [caixinhaRendimentoPeriodo, setCaixinhaRendimentoPeriodo] = useState('mensal'); // 'mensal' ou 'anual'
   const [modoCaixinhaVisao, setModoCaixinhaVisao] = useState('atual'); // 'atual' ou 'projetada'
-  const [horizontePrevisao, setHorizontePrevisao] = useState('completa'); // '6_meses', '1_ano', '2_anos', etc.
+  const [horizontePrevisao, setHorizontePrevisao] = useState(() => {
+    try {
+      return localStorage.getItem('@gestor_caixinha_horizonte') || 'completa';
+    } catch {
+      return 'completa';
+    }
+  });
+
+  const [mesesPersonalizados, setMesesPersonalizados] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('@gestor_caixinha_meses_pers');
+      return salvo ? parseInt(salvo, 10) : 7;
+    } catch {
+      return 7;
+    }
+  });
+
+  const [tipoPrevisaoEspecifica, setTipoPrevisaoEspecifica] = useState(() => {
+    try {
+      return localStorage.getItem('@gestor_caixinha_tipo_pers') || 'meses';
+    } catch {
+      return 'meses';
+    }
+  });
+
+  const [mesMetaPrevisao, setMesMetaPrevisao] = useState(() => {
+    try {
+      return localStorage.getItem('@gestor_caixinha_mes_meta') || 'Dez';
+    } catch {
+      return 'Dez';
+    }
+  });
+
+  const [anoMetaPrevisao, setAnoMetaPrevisao] = useState(() => {
+    try {
+      return localStorage.getItem('@gestor_caixinha_ano_meta') || '2027';
+    } catch {
+      return '2027';
+    }
+  });
+
+  const [aporteExtraMensal, setAporteExtraMensal] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('@gestor_caixinha_aporte_extra');
+      return salvo ? parseFloat(salvo) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [metaSaldoCaixinha, setMetaSaldoCaixinha] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('@gestor_caixinha_meta_saldo');
+      return salvo ? parseFloat(salvo) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const atualizarHorizontePrevisao = (novoHorizonte) => {
+    setHorizontePrevisao(novoHorizonte);
+    localStorage.setItem('@gestor_caixinha_horizonte', novoHorizonte);
+  };
+
+  const atualizarMesesPersonalizados = (num) => {
+    const val = Math.max(1, Math.min(120, parseInt(num, 10) || 1));
+    setMesesPersonalizados(val);
+    localStorage.setItem('@gestor_caixinha_meses_pers', val.toString());
+  };
+
+  const atualizarTipoPrevisaoEspecifica = (tipo) => {
+    setTipoPrevisaoEspecifica(tipo);
+    localStorage.setItem('@gestor_caixinha_tipo_pers', tipo);
+  };
+
+  const atualizarDataMetaPrevisao = (mes, ano) => {
+    if (mes) {
+      setMesMetaPrevisao(mes);
+      localStorage.setItem('@gestor_caixinha_mes_meta', mes);
+    }
+    if (ano) {
+      setAnoMetaPrevisao(ano);
+      localStorage.setItem('@gestor_caixinha_ano_meta', ano);
+    }
+  };
+
+  const atualizarAporteExtraMensal = (val) => {
+    const num = Math.max(0, parseFloat(val) || 0);
+    setAporteExtraMensal(num);
+    localStorage.setItem('@gestor_caixinha_aporte_extra', num.toString());
+  };
+
+  const atualizarMetaSaldoCaixinha = (val) => {
+    const num = Math.max(0, parseFloat(val) || 0);
+    setMetaSaldoCaixinha(num);
+    localStorage.setItem('@gestor_caixinha_meta_saldo', num.toString());
+  };
 
   // Estado da Paleta de Cores & Temas Dinâmicos
   const [paletaCores, setPaletaCores] = useState(() => {
@@ -205,6 +320,126 @@ export const BudgetProvider = ({ children }) => {
       return PALETA_PADRAO;
     }
   });
+
+  // --- SISTEMA DE ATUALIZAÇÃO AUTOMÁTICA (GITHUB RELEASES & ELECTRON-UPDATER) ---
+  const [updateDisponivel, setUpdateDisponivel] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState({ state: 'idle', progress: 0 });
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [verificandoUpdate, setVerificandoUpdate] = useState(false);
+  const [mensagemUpdate, setMensagemUpdate] = useState('');
+
+  const ignorarVersaoUpdate = (versao) => {
+    if (!versao) return;
+    try {
+      localStorage.setItem('@gestor_update_ignorado', versao);
+    } catch (e) {}
+  };
+
+  // Escuta os eventos e progresso do electron-updater em tempo real
+  useEffect(() => {
+    if (window.electronAPI?.onUpdateStatus) {
+      const unsubscribe = window.electronAPI.onUpdateStatus((status) => {
+        if (status) {
+          setUpdateStatus(status);
+          if (status.state === 'available' || status.state === 'downloaded') {
+            const versaoIgnorada = localStorage.getItem('@gestor_update_ignorado');
+            if (versaoIgnorada !== status.version) {
+              setIsUpdateModalOpen(true);
+            }
+          }
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
+  const baixarAtualizacaoNativa = async () => {
+    if (window.electronAPI?.downloadUpdate) {
+      return await window.electronAPI.downloadUpdate();
+    }
+    return { success: false, error: 'API não disponível' };
+  };
+
+  const reiniciarEAplicarAtualizacao = () => {
+    if (window.electronAPI?.quitAndInstallUpdate) {
+      window.electronAPI.quitAndInstallUpdate();
+    }
+  };
+
+  const verificarAtualizacoesManual = async () => {
+    setVerificandoUpdate(true);
+    setMensagemUpdate('');
+    
+    // Tenta primeiro via electron-updater nativo
+    if (window.electronAPI?.checkForUpdates) {
+      try {
+        const resNativo = await window.electronAPI.checkForUpdates();
+        setVerificandoUpdate(false);
+        if (resNativo?.error) {
+          setMensagemUpdate(resNativo.error);
+          return resNativo;
+        }
+      } catch (e) {
+        // Prossegue para fallback
+      }
+    }
+
+    if (!window.apiTurso?.verificarAtualizacao) {
+      setVerificandoUpdate(false);
+      return { success: false, error: 'Funcionalidade disponível apenas no aplicativo instalado.' };
+    }
+
+    try {
+      const res = await window.apiTurso.verificarAtualizacao();
+      setVerificandoUpdate(false);
+      if (res?.success && res.temAtualizacao) {
+        setUpdateDisponivel(res);
+        setIsUpdateModalOpen(true);
+        setMensagemUpdate(`🚀 Nova versão ${res.versaoMaisRecente} disponível!`);
+        return res;
+      } else if (res?.success && !res.temAtualizacao) {
+        setMensagemUpdate(`✅ Você já está utilizando a versão mais recente (${res.versaoAtual || 'v1.0.1'}).`);
+        return res;
+      } else {
+        setMensagemUpdate(res?.error || 'Não foi possível verificar atualizações no momento.');
+        return res;
+      }
+    } catch (err) {
+      setVerificandoUpdate(false);
+      setMensagemUpdate('Falha ao conectar aos servidores do GitHub.');
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Verificação Automática ao Entrar no Aplicativo (executa após 2.5 segundos)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      // 1. Tenta electron-updater nativo
+      if (window.electronAPI?.checkForUpdates) {
+        try {
+          await window.electronAPI.checkForUpdates();
+        } catch (e) {}
+      }
+
+      // 2. Verificação de fallback via API REST do GitHub
+      if (window.apiTurso?.verificarAtualizacao) {
+        try {
+          const res = await window.apiTurso.verificarAtualizacao();
+          if (res?.success && res.temAtualizacao) {
+            const versaoIgnorada = localStorage.getItem('@gestor_update_ignorado');
+            if (versaoIgnorada !== res.versaoMaisRecente) {
+              setUpdateDisponivel(res);
+              setIsUpdateModalOpen(true);
+            }
+          }
+        } catch (e) {
+          console.warn('Verificação silenciosa falhou:', e.message);
+        }
+      }
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const aplicarPaletaCores = async (novaPaleta) => {
     setPaletaCores(novaPaleta);
@@ -242,7 +477,13 @@ export const BudgetProvider = ({ children }) => {
 
   // Modais Globais
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalInitialData, setModalInitialData] = useState(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  const abrirModalAdicionar = (dadosIniciais = null) => {
+    setModalInitialData(dadosIniciais);
+    setIsModalOpen(true);
+  };
 
   // Login de Usuário (Chamado por AuthView)
   const login = async ({ email, senha }) => {
@@ -492,21 +733,33 @@ export const BudgetProvider = ({ children }) => {
     if (contaAtiva?.id) {
       const dbAtiva = contaAtiva.caixinha_ativa === true || contaAtiva.caixinha_ativa === 'true';
       const dbInicial = parseFloat(contaAtiva.caixinha_saldo_inicial) || 0;
+      const dbRendTaxa = parseFloat(contaAtiva.caixinha_rendimento_taxa) || 0;
+      const dbRendPeriodo = contaAtiva.caixinha_rendimento_periodo || 'mensal';
 
       const localAtiva = localStorage.getItem(`@gestor_caixinha_ativa_${contaAtiva.id}`) === 'true';
       const localInicial = parseFloat(localStorage.getItem(`@gestor_caixinha_inicial_${contaAtiva.id}`)) || 0;
+      const localRendTaxa = parseFloat(localStorage.getItem(`@gestor_caixinha_rend_taxa_${contaAtiva.id}`)) || 0;
+      const localRendPeriodo = localStorage.getItem(`@gestor_caixinha_rend_periodo_${contaAtiva.id}`) || 'mensal';
 
       const ativaFinal = (contaAtiva.caixinha_ativa !== undefined && contaAtiva.caixinha_ativa !== null) ? dbAtiva : localAtiva;
       const inicialFinal = (contaAtiva.caixinha_saldo_inicial !== undefined && contaAtiva.caixinha_saldo_inicial !== null) ? dbInicial : localInicial;
+      const rendTaxaFinal = (contaAtiva.caixinha_rendimento_taxa !== undefined && contaAtiva.caixinha_rendimento_taxa !== null) ? dbRendTaxa : localRendTaxa;
+      const rendPeriodoFinal = (contaAtiva.caixinha_rendimento_periodo !== undefined && contaAtiva.caixinha_rendimento_periodo !== null) ? dbRendPeriodo : localRendPeriodo;
 
       setIsCaixinhaAtiva(ativaFinal);
       setSaldoInicialCaixinha(inicialFinal);
+      setCaixinhaRendimentoTaxa(rendTaxaFinal);
+      setCaixinhaRendimentoPeriodo(rendPeriodoFinal);
 
       localStorage.setItem(`@gestor_caixinha_ativa_${contaAtiva.id}`, ativaFinal ? 'true' : 'false');
       localStorage.setItem(`@gestor_caixinha_inicial_${contaAtiva.id}`, inicialFinal.toString());
+      localStorage.setItem(`@gestor_caixinha_rend_taxa_${contaAtiva.id}`, rendTaxaFinal.toString());
+      localStorage.setItem(`@gestor_caixinha_rend_periodo_${contaAtiva.id}`, rendPeriodoFinal);
     } else {
       setIsCaixinhaAtiva(false);
       setSaldoInicialCaixinha(0);
+      setCaixinhaRendimentoTaxa(0);
+      setCaixinhaRendimentoPeriodo('mensal');
     }
   }, [contaAtiva]);
 
@@ -548,6 +801,41 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
+  const atualizarRendimentoCaixinha = async ({ taxa, periodo }) => {
+    const numTaxa = parseFloat(taxa) >= 0 ? parseFloat(taxa) : 0;
+    const tipoPeriodo = periodo === 'anual' ? 'anual' : 'mensal';
+
+    setCaixinhaRendimentoTaxa(numTaxa);
+    setCaixinhaRendimentoPeriodo(tipoPeriodo);
+
+    if (contaAtiva?.id) {
+      localStorage.setItem(`@gestor_caixinha_rend_taxa_${contaAtiva.id}`, numTaxa.toString());
+      localStorage.setItem(`@gestor_caixinha_rend_periodo_${contaAtiva.id}`, tipoPeriodo);
+
+      setContaAtiva((prev) => (prev ? {
+        ...prev,
+        caixinha_rendimento_taxa: numTaxa,
+        caixinha_rendimento_periodo: tipoPeriodo
+      } : prev));
+
+      setContas((prevContas) =>
+        prevContas.map((c) => (c.id === contaAtiva.id ? {
+          ...c,
+          caixinha_rendimento_taxa: numTaxa,
+          caixinha_rendimento_periodo: tipoPeriodo
+        } : c))
+      );
+
+      if (window.apiTurso?.salvarConfiguracaoCaixinha) {
+        await window.apiTurso.salvarConfiguracaoCaixinha({
+          contaId: contaAtiva.id,
+          caixinhaRendimentoTaxa: numTaxa,
+          caixinhaRendimentoPeriodo: tipoPeriodo,
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     if (usuarioLogado?.id) {
       carregarContas(usuarioLogado.id);
@@ -582,8 +870,10 @@ export const BudgetProvider = ({ children }) => {
       if (res?.success) {
         if (res.mesCalculado) setMesSelecionado(res.mesCalculado);
         if (res.anoCalculado) setAnoSelecionado(res.anoCalculado);
-        await carregarTransacoes();
-        await carregarEtiquetas(usuarioLogado.id);
+        await Promise.all([
+          carregarTransacoes(),
+          carregarEtiquetas(usuarioLogado.id),
+        ]);
       }
       return res;
     } catch (err) {
@@ -601,8 +891,10 @@ export const BudgetProvider = ({ children }) => {
         usuarioId: usuarioLogado.id,
       });
       if (res?.success) {
-        await carregarTransacoes();
-        await carregarEtiquetas(usuarioLogado.id);
+        await Promise.all([
+          carregarTransacoes(),
+          carregarEtiquetas(usuarioLogado.id),
+        ]);
       }
       return res;
     } catch (err) {
@@ -610,13 +902,16 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  const deletarTransacao = async (id, opcoesExtra = {}) => {
+  const deletarTransacao = async (idOrObject, opcoesExtra = {}) => {
     if (!usuarioLogado || !window.apiTurso) return;
+    const finalId = typeof idOrObject === 'object' && idOrObject !== null ? idOrObject.id : idOrObject;
+    const finalExtra = typeof idOrObject === 'object' && idOrObject !== null ? { ...idOrObject, ...opcoesExtra } : opcoesExtra;
+
     try {
       await window.apiTurso.deletarTransacao({
-        id,
+        id: finalId,
         usuarioId: usuarioLogado.id,
-        ...opcoesExtra,
+        ...finalExtra,
       });
       await carregarTransacoes();
     } catch (err) {
@@ -624,12 +919,15 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  const importarTransacoesNubankCSV = async (transacoesList) => {
-    if (!usuarioLogado || !contaAtiva || !window.apiTurso) return { success: false, error: 'Sessão ou conta ativa inválida.' };
+  const importarTransacoesNubankCSV = async (transacoesList, targetContaId = null) => {
+    if (!usuarioLogado || !window.apiTurso) return { success: false, error: 'Sessão inválida.' };
+    const contaParaUsar = targetContaId || contaAtiva?.id;
+    if (!contaParaUsar) return { success: false, error: 'Nenhuma conta bancária selecionada.' };
+
     try {
       const res = await window.apiTurso.importarTransacoesNubankCSV({
         usuarioId: usuarioLogado.id,
-        contaId: contaAtiva.id,
+        contaId: contaParaUsar,
         transacoes: transacoesList,
       });
       if (res?.success) {
@@ -816,7 +1114,15 @@ export const BudgetProvider = ({ children }) => {
 
   const totalReceitas = (receitas || []).reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
   const totalDespesas = (despesas || []).reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
-  const economia = totalReceitas - totalDespesas;
+  const totalReservas = (despesas || []).reduce(
+    (acc, curr) => (curr.eh_reserva === 1 || curr.eh_reserva === '1' || curr.eh_reserva === true || curr.ehReserva ? acc + Number(curr.valor || 0) : acc),
+    0
+  );
+  const despesasReais = totalDespesas - totalReservas;
+  const saldoLivre = totalReceitas - totalDespesas;
+  // Economia / Valor a ser guardado na Caixinha:
+  // As reservas não são subtraídas da caixinha (somam ao valor guardado)
+  const economia = totalReceitas - despesasReais;
   const transacoesTabela = abaAtiva === 'receitas' ? (receitas || []) : (despesas || []);
 
   return (
@@ -852,9 +1158,15 @@ export const BudgetProvider = ({ children }) => {
         transacoesTabela: transacoesTabela || [],
         totalReceitas,
         totalDespesas,
+        totalReservas,
+        despesasReais,
+        saldoLivre,
         economia,
         isModalOpen,
         setIsModalOpen,
+        modalInitialData,
+        setModalInitialData,
+        abrirModalAdicionar,
         isCategoryModalOpen,
         setIsCategoryModalOpen,
         adicionarTransacao,
@@ -875,15 +1187,39 @@ export const BudgetProvider = ({ children }) => {
         toggleCaixinha,
         saldoInicialCaixinha,
         atualizarSaldoInicialCaixinha,
+        caixinhaRendimentoTaxa,
+        caixinhaRendimentoPeriodo,
+        atualizarRendimentoCaixinha,
         saldoCaixinhaAcumulado,
         carregarTotalCaixinha,
         modoCaixinhaVisao,
         setModoCaixinhaVisao,
         horizontePrevisao,
-        setHorizontePrevisao,
+        setHorizontePrevisao: atualizarHorizontePrevisao,
+        mesesPersonalizados,
+        setMesesPersonalizados: atualizarMesesPersonalizados,
+        tipoPrevisaoEspecifica,
+        setTipoPrevisaoEspecifica: atualizarTipoPrevisaoEspecifica,
+        mesMetaPrevisao,
+        anoMetaPrevisao,
+        atualizarDataMetaPrevisao,
+        aporteExtraMensal,
+        setAporteExtraMensal: atualizarAporteExtraMensal,
+        metaSaldoCaixinha,
+        setMetaSaldoCaixinha: atualizarMetaSaldoCaixinha,
         paletaCores,
         aplicarPaletaCores,
         PALETAS_PREDEFINIDAS,
+        updateDisponivel,
+        updateStatus,
+        isUpdateModalOpen,
+        setIsUpdateModalOpen,
+        verificandoUpdate,
+        mensagemUpdate,
+        verificarAtualizacoesManual,
+        ignorarVersaoUpdate,
+        baixarAtualizacaoNativa,
+        reiniciarEAplicarAtualizacao,
       }}
     >
       {children}

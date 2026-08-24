@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS etiquetas (
 CREATE TABLE IF NOT EXISTS receitas (
   id SERIAL PRIMARY KEY,
   usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  conta_id INT REFERENCES contas(id) ON DELETE SET NULL,
+  conta_id INT REFERENCES contas(id) ON DELETE CASCADE,
   descricao VARCHAR(255) NOT NULL,
   valor NUMERIC(15, 2) NOT NULL,
   data DATE NOT NULL,
@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS receitas (
   etiqueta VARCHAR(255) DEFAULT 'Geral',
   tipo_pagamento VARCHAR(100) DEFAULT 'Outros',
   pago BOOLEAN DEFAULT TRUE,
+  eh_reserva INT DEFAULT 0,
   observacao TEXT,
   anexo TEXT,
   repetir BOOLEAN DEFAULT FALSE,
@@ -76,7 +77,7 @@ CREATE TABLE IF NOT EXISTS receitas (
 CREATE TABLE IF NOT EXISTS despesas (
   id SERIAL PRIMARY KEY,
   usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  conta_id INT REFERENCES contas(id) ON DELETE SET NULL,
+  conta_id INT REFERENCES contas(id) ON DELETE CASCADE,
   descricao VARCHAR(255) NOT NULL,
   valor NUMERIC(15, 2) NOT NULL,
   data DATE NOT NULL,
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS despesas (
   etiqueta VARCHAR(255) DEFAULT 'Geral',
   tipo_pagamento VARCHAR(100) DEFAULT 'Outros',
   pago BOOLEAN DEFAULT TRUE,
+  eh_reserva INT DEFAULT 0,
   observacao TEXT,
   anexo TEXT,
   repetir BOOLEAN DEFAULT FALSE,

@@ -11,6 +11,7 @@ import AddExpenseModal from './components/AddExpenseModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import AuthView from './components/AuthView';
 import UserProfileHeader from './components/UserProfileHeader';
+import UpdateModal from './components/UpdateModal';
 import { BudgetProvider, useBudget } from './contexts/BudgetContext';
 import appIcon from '../images/app_icon.jpg';
 
@@ -79,12 +80,7 @@ class ErrorBoundary extends Component {
 }
 
 const MainLayout = () => {
-  const { usuarioLogado, anoSelecionado } = useBudget();
-
-  // Se não houver usuário logado, exibe a tela de Login / Registro
-  if (!usuarioLogado) {
-    return <AuthView />;
-  }
+  const { anoSelecionado } = useBudget();
 
   return (
     <div
@@ -186,11 +182,39 @@ const MainLayout = () => {
   );
 };
 
+const AppContent = () => {
+  const {
+    usuarioLogado,
+    updateDisponivel,
+    updateStatus,
+    isUpdateModalOpen,
+    setIsUpdateModalOpen,
+    ignorarVersaoUpdate,
+    baixarAtualizacaoNativa,
+    reiniciarEAplicarAtualizacao,
+  } = useBudget();
+
+  return (
+    <>
+      {usuarioLogado ? <MainLayout /> : <AuthView />}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        updateData={updateDisponivel}
+        updateStatus={updateStatus}
+        onClose={() => setIsUpdateModalOpen(false)}
+        onIgnoreVersion={ignorarVersaoUpdate}
+        onDownloadUpdate={baixarAtualizacaoNativa}
+        onQuitAndInstall={reiniciarEAplicarAtualizacao}
+      />
+    </>
+  );
+};
+
 const App = () => {
   return (
     <ErrorBoundary>
       <BudgetProvider>
-        <MainLayout />
+        <AppContent />
       </BudgetProvider>
     </ErrorBoundary>
   );

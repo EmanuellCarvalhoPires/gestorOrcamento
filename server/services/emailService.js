@@ -1,112 +1,116 @@
 import nodemailer from 'nodemailer';
 
 /**
- * Envia e-mail de recuperação de senha seguro para o usuário
+ * Cria o transporter SMTP configurado para o Gmail oficial do Gestor de Orçamento
  */
-export async function enviarEmailRecuperacao(emailDestino, nomeUsuario, tokenRecuperacao, codigo6Digitos) {
-  let transporter;
-  let isCustomSmtp = false;
+function criarTransporter() {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const secure = process.env.SMTP_SECURE === 'true';
+  const user = process.env.SMTP_USER || 'gestororc@gmail.com';
+  const pass = process.env.SMTP_PASS || 'cvfeowfdngseznfi';
 
-  // Verifica se existem credenciais SMTP no .env
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    isCustomSmtp = true;
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-  } else {
-    // Modo de Desenvolvimento / Testes (Ethereal Email Fake SMTP)
-    const testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-  }
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+  });
+}
 
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #3e3e3e; color: #ffffff; padding: 30px; border-radius: 16px;">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="color: #ffe192; margin: 0;">Gestor de Orçamento</h1>
-        <p style="color: #dddddd; font-size: 14px;">Segurança e Controle Financeiro</p>
+/**
+ * Template base visual Flowly Finance / Gestor de Orçamento (Dark + Dourado Nobre)
+ */
+function gerarHtmlEmail({ titulo, nomeUsuario, mensagem, codigo, aviso }) {
+  return `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 580px; margin: 0 auto; background-color: #1f2227; color: #ffffff; padding: 32px; border-radius: 18px; border: 1px solid #343840;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #ffe192; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Simple Finances</h1>
+        <p style="color: #8d99ae; font-size: 13px; margin: 4px 0 0 0;">Gestor de Orçamento & Controle Financeiro</p>
       </div>
 
-      <div style="background-color: #545454; padding: 24px; border-radius: 12px; margin-bottom: 20px;">
-        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">Olá, ${nomeUsuario || 'Usuário'}!</h2>
-        <p style="color: #dddddd; font-size: 14px; line-height: 1.5;">
-          Recebemos uma solicitação para redefinir a senha da sua conta registrada com o e-mail <strong>${emailDestino}</strong>.
+      <div style="background-color: #282b32; padding: 24px; border-radius: 14px; border: 1px solid #3e434d;">
+        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">Olá, <strong>${nomeUsuario || 'Usuário'}</strong>!</h2>
+        <p style="color: #c5c9d1; font-size: 14px; line-height: 1.6; margin: 12px 0;">
+          ${mensagem}
         </p>
 
-        <p style="color: #dddddd; font-size: 14px; margin-top: 20px;">Seu Código de Verificação de 6 dígitos é:</p>
-        <div style="background-color: #3e3e3e; border: 2px dashed #ffe192; padding: 15px; text-align: center; border-radius: 10px; margin: 15px 0;">
-          <span style="font-size: 28px; font-weight: bold; color: #ffe192; letter-spacing: 6px;">${codigo6Digitos}</span>
+        <p style="color: #8d99ae; font-size: 13px; margin-top: 20px; margin-bottom: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">
+          Seu Código de Verificação:
+        </p>
+        
+        <div style="background-color: #1f2227; border: 2px dashed #ffe192; padding: 16px; text-align: center; border-radius: 12px; margin: 12px 0;">
+          <span style="font-size: 32px; font-weight: 800; color: #ffe192; letter-spacing: 8px; font-family: monospace;">${codigo}</span>
         </div>
 
-        <p style="color: #aaaaaa; font-size: 12px; margin-top: 20px;">
-          Este código é válido por <strong>15 minutos</strong>. Se você não solicitou a redefinição de senha, ignore este e-mail.
+        <p style="color: #8d99ae; font-size: 12px; line-height: 1.5; margin-top: 18px; margin-bottom: 0;">
+          ${aviso || 'Este código é de uso exclusivo e expira em 10 minutos. Caso não tenha solicitado, ignore esta mensagem com segurança.'}
         </p>
       </div>
 
-      <div style="text-align: center; color: #aaaaaa; font-size: 11px;">
-        © 2026 Gestor de Orçamento. Todos os direitos reservados.
+      <div style="text-align: center; color: #6b7280; font-size: 11px; margin-top: 24px;">
+        © 2026 Simple Finances / Gestor de Orçamento. Todos os direitos reservados.
       </div>
     </div>
   `;
+}
+
+/**
+ * Envia E-mail de Código de Verificação de Cadastro (6 dígitos)
+ */
+export async function enviarEmailVerificacao(emailDestino, nomeUsuario, codigo6Digitos) {
+  const transporter = criarTransporter();
+  const htmlContent = gerarHtmlEmail({
+    titulo: 'Verificação de Conta',
+    nomeUsuario,
+    mensagem: `Obrigado por se cadastrar no <strong>Simple Finances</strong>! Para concluir seu registro e ativar sua conta com segurança, insira o código de 6 dígitos abaixo no aplicativo:`,
+    codigo: codigo6Digitos,
+    aviso: 'Este código é válido por 10 minutos. Se você não solicitou este cadastro, pode desconsiderar este e-mail.'
+  });
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || '"Simple Finances" <gestororc@gmail.com>',
+    to: emailDestino,
+    subject: '✨ Código de Verificação de Cadastro - Simple Finances',
+    html: htmlContent,
+  };
 
   try {
-    const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Gestor de Orçamento" <${process.env.SMTP_USER || 'no-reply@gestorcamento.com'}>`,
-      to: emailDestino,
-      subject: '🔑 Código de Recuperação de Senha - Gestor de Orçamento',
-      html: htmlContent,
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log(`[E-mail Teste Sent] Visualizar e-mail em: ${previewUrl}`);
-    } else {
-      console.log(`✅ [E-mail Enviado com Sucesso] Para: ${emailDestino} via SMTP Gmail`);
-    }
-
-    return { success: true, messageId: info.messageId, previewUrl };
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ [E-mail de Cadastro Enviado] Para: ${emailDestino} | ID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.warn('⚠️ [SMTP Warning] Falha na autenticação do e-mail principal, acionando fallback de segurança:', err.message);
+    console.error('❌ [Erro SMTP Cadastro]:', err.message);
+    throw err;
+  }
+}
 
-    // Se o SMTP do Gmail falhar (ex: senha incorreta ou bloqueio), usa o Ethereal para NUNCA travar a aplicação com erro 500
-    if (isCustomSmtp) {
-      try {
-        const testAccount = await nodemailer.createTestAccount();
-        const fallbackTransporter = nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          secure: false,
-          auth: { user: testAccount.user, pass: testAccount.pass },
-        });
+/**
+ * Envia E-mail de Recuperação de Senha (6 dígitos)
+ */
+export async function enviarEmailRecuperacao(emailDestino, nomeUsuario, codigo6Digitos) {
+  const transporter = criarTransporter();
+  const htmlContent = gerarHtmlEmail({
+    titulo: 'Recuperação de Senha',
+    nomeUsuario,
+    mensagem: `Recebemos uma solicitação para redefinir a senha da sua conta vinculada ao e-mail <strong>${emailDestino}</strong>. Utilize o código de 6 dígitos abaixo no aplicativo para criar uma nova senha:`,
+    codigo: codigo6Digitos,
+    aviso: 'Este código é válido por 15 minutos. Se você não solicitou a redefinição de senha, nenhuma alteração será feita na sua conta.'
+  });
 
-        const fallbackInfo = await fallbackTransporter.sendMail({
-          from: '"Gestor de Orçamento" <no-reply@gestorcamento.com>',
-          to: emailDestino,
-          subject: '🔑 Código de Recuperação de Senha - Gestor de Orçamento',
-          html: htmlContent,
-        });
+  const mailOptions = {
+    from: process.env.SMTP_FROM || '"Simple Finances" <gestororc@gmail.com>',
+    to: emailDestino,
+    subject: '🔑 Código de Recuperação de Senha - Simple Finances',
+    html: htmlContent,
+  };
 
-        const previewUrl = nodemailer.getTestMessageUrl(fallbackInfo);
-        console.log(`[Fallback Email Sent] Link para visualizar o e-mail: ${previewUrl}`);
-        return { success: true, previewUrl, fallback: true };
-      } catch (fbErr) {
-        console.error('Erro no fallback:', fbErr);
-      }
-    }
-
-    return { success: true, fallback: true };
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ [E-mail de Recuperação Enviado] Para: ${emailDestino} | ID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.error('❌ [Erro SMTP Recuperação]:', err.message);
+    throw err;
   }
 }

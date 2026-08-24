@@ -8,10 +8,14 @@ server/node_modules/
 # BUILD E CACHE
 # ====================
 dist/
+dist_installer/
 out/
 .vite/
 .webpack/
 *.tsbuildinfo
+*.blockmap
+latest.yml
+latest-*.yml
 
 # ====================
 # ELECTRON FORGE

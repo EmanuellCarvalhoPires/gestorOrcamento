@@ -14,6 +14,7 @@ import net from 'node:net';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import { initAutoUpdater, registerUpdaterIpc } from './services/updaterService.js';
 
 const { Pool } = pg;
 
@@ -368,7 +369,7 @@ if (modoSquirrelAtivo) {
     console.error('⚠️ [PostgreSQL Backup] Erro na conexão com o banco de backup:', err.message);
   });
 
-// Helper de Dupla Gravação e Failover Automático
+// Helper de Gravação Rápida com Replicação Assíncrona e Failover Automático
 async function dbQuery(text, params = []) {
   const isWriteQuery = /^\s*(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE)/i.test(text);
 
@@ -382,13 +383,11 @@ async function dbQuery(text, params = []) {
     console.error('⚠️ [PostgreSQL Principal] Falha na operação. Acionando Failover para o Backup:', err.message);
   }
 
-  // Dupla Gravação: Replica modificações em tempo real no banco de backup
+  // Dupla Gravação: Replica modificações em tempo real no banco de backup de forma assíncrona (não-bloqueante)
   if (isWriteQuery) {
-    try {
-      await poolBackup.query(text, params);
-    } catch (errBkp) {
+    poolBackup.query(text, params).catch((errBkp) => {
       console.error('⚠️ [PostgreSQL Backup] Erro ao espelhar dados no banco de backup:', errBkp.message);
-    }
+    });
   }
 
   if (resPrincipal) return resPrincipal;
@@ -462,22 +461,13 @@ function getCategoriasPadrao(perfilUso) {
 async function salvarEtiquetaSeNova(usuarioId, etiquetaNome) {
   if (!usuarioId || !etiquetaNome || !etiquetaNome.trim()) return;
   const nomeLimpo = etiquetaNome.trim();
+  if (ETIQUETAS_PADRAO.includes(nomeLimpo)) return;
 
-  try {
-    const check = await dbQuery(
-      'SELECT id FROM etiquetas WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))',
-      [usuarioId, nomeLimpo]
-    );
-
-    if (check.rows.length === 0) {
-      await dbQuery(
-        'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2)',
-        [usuarioId, nomeLimpo]
-      );
-    }
-  } catch (err) {
-    console.error('Erro ao salvar nova etiqueta:', err);
-  }
+  // Insere em background assíncrono com ON CONFLICT para não bloquear requisições
+  dbQuery(
+    'INSERT INTO etiquetas (usuario_id, nome) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [usuarioId, nomeLimpo]
+  ).catch(() => {});
 }
 
 // Inicializa as tabelas nos Bancos de Dados PostgreSQL (Principal + Backup em Dupla Gravação)
@@ -519,6 +509,8 @@ async function initDatabase() {
     );`,
     `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_ativa BOOLEAN DEFAULT false;`,
     `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_saldo_inicial NUMERIC(15, 2) DEFAULT 0.00;`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_rendimento_taxa NUMERIC(8, 4) DEFAULT 0.0000;`,
+    `ALTER TABLE contas ADD COLUMN IF NOT EXISTS caixinha_rendimento_periodo VARCHAR(20) DEFAULT 'mensal';`,
     `ALTER TABLE contas ADD COLUMN IF NOT EXISTS paleta_cores JSONB DEFAULT NULL;`,
     `ALTER TABLE contas ADD COLUMN IF NOT EXISTS descricao TEXT;`,
 
@@ -553,6 +545,7 @@ async function initDatabase() {
       etiqueta VARCHAR(100) DEFAULT 'Geral',
       parcelas VARCHAR(50) DEFAULT '1/1',
       eh_fixa INT DEFAULT 0,
+      eh_reserva INT DEFAULT 0,
       descricao TEXT,
       mes VARCHAR(20) NOT NULL,
       ano VARCHAR(10) NOT NULL,
@@ -572,6 +565,7 @@ async function initDatabase() {
       etiqueta VARCHAR(100) DEFAULT 'Geral',
       parcelas VARCHAR(50) DEFAULT '1/1',
       eh_fixa INT DEFAULT 0,
+      eh_reserva INT DEFAULT 0,
       descricao TEXT,
       mes VARCHAR(20) NOT NULL,
       ano VARCHAR(10) NOT NULL,
@@ -608,7 +602,15 @@ async function initDatabase() {
     `ALTER TABLE despesas ALTER COLUMN data SET DEFAULT CURRENT_DATE;`,
 
     `CREATE INDEX IF NOT EXISTS idx_receitas_usuario ON receitas (usuario_id, conta_id, ano, mes);`,
-    `CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, conta_id, ano, mes);`
+    `CREATE INDEX IF NOT EXISTS idx_despesas_usuario ON despesas (usuario_id, conta_id, ano, mes);`,
+    `ALTER TABLE receitas DROP CONSTRAINT IF EXISTS receitas_conta_id_fkey;`,
+    `ALTER TABLE receitas ADD CONSTRAINT receitas_conta_id_fkey FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE;`,
+    `ALTER TABLE despesas DROP CONSTRAINT IF EXISTS despesas_conta_id_fkey;`,
+    `ALTER TABLE despesas ADD CONSTRAINT despesas_conta_id_fkey FOREIGN KEY (conta_id) REFERENCES contas(id) ON DELETE CASCADE;`,
+    `ALTER TABLE receitas ADD COLUMN IF NOT EXISTS eh_reserva INT DEFAULT 0;`,
+    `ALTER TABLE despesas ADD COLUMN IF NOT EXISTS eh_reserva INT DEFAULT 0;`,
+    `DELETE FROM receitas WHERE LOWER(nome) LIKE '%rdb%' OR LOWER(descricao) LIKE '%rdb%';`,
+    `DELETE FROM despesas WHERE LOWER(nome) LIKE '%rdb%' OR LOWER(descricao) LIKE '%rdb%';`
   ];
 
   try {
@@ -1422,17 +1424,17 @@ ipcMain.handle('carregar-contas', async (event, { usuarioId }) => {
   if (!usuarioId) return [];
 
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       'SELECT * FROM contas WHERE usuario_id = $1 ORDER BY id ASC',
       [usuarioId]
     );
 
     if (result.rows.length === 0) {
-      const userCheck = await pool.query('SELECT perfil_uso FROM usuarios WHERE id = $1', [usuarioId]);
+      const userCheck = await dbQuery('SELECT perfil_uso FROM usuarios WHERE id = $1', [usuarioId]);
       const perfilUso = userCheck.rows[0]?.perfil_uso || 'individual';
       const nomeConta = perfilUso === 'comercial' ? 'Conta Comercial' : 'Conta Pessoal';
 
-      const resConta = await pool.query(
+      const resConta = await dbQuery(
         'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [usuarioId, nomeConta, perfilUso, 'Conta padrão', '#ffe192']
       );
@@ -1447,7 +1449,7 @@ ipcMain.handle('carregar-contas', async (event, { usuarioId }) => {
   }
 });
 
-ipcMain.handle('salvar-configuracao-caixinha', async (event, { contaId, caixinhaAtiva, caixinhaSaldoInicial }) => {
+ipcMain.handle('salvar-configuracao-caixinha', async (event, { contaId, caixinhaAtiva, caixinhaSaldoInicial, caixinhaRendimentoTaxa, caixinhaRendimentoPeriodo }) => {
   if (!contaId) return { success: false, error: 'ID da conta não informado' };
   try {
     const fields = [];
@@ -1464,9 +1466,19 @@ ipcMain.handle('salvar-configuracao-caixinha', async (event, { contaId, caixinha
       values.push(parseFloat(caixinhaSaldoInicial) || 0);
     }
 
+    if (caixinhaRendimentoTaxa !== undefined && caixinhaRendimentoTaxa !== null) {
+      fields.push(`caixinha_rendimento_taxa = $${idx++}`);
+      values.push(parseFloat(caixinhaRendimentoTaxa) || 0);
+    }
+
+    if (caixinhaRendimentoPeriodo !== undefined && caixinhaRendimentoPeriodo !== null) {
+      fields.push(`caixinha_rendimento_periodo = $${idx++}`);
+      values.push(caixinhaRendimentoPeriodo === 'anual' ? 'anual' : 'mensal');
+    }
+
     if (fields.length > 0) {
       values.push(contaId);
-      await pool.query(
+      await dbQuery(
         `UPDATE contas SET ${fields.join(', ')} WHERE id = $${idx}`,
         values
       );
@@ -1483,7 +1495,7 @@ ipcMain.handle('salvar-paleta-cores', async (event, { contaId, paletaCores }) =>
   if (!contaId) return { success: false, error: 'ID da conta não informado' };
   try {
     const paletaJson = typeof paletaCores === 'string' ? paletaCores : JSON.stringify(paletaCores);
-    await pool.query('UPDATE contas SET paleta_cores = $1 WHERE id = $2', [paletaJson, contaId]);
+    await dbQuery('UPDATE contas SET paleta_cores = $1 WHERE id = $2', [paletaJson, contaId]);
     return { success: true };
   } catch (error) {
     console.error('Erro ao salvar paleta de cores no banco:', error);
@@ -1494,7 +1506,7 @@ ipcMain.handle('salvar-paleta-cores', async (event, { contaId, paletaCores }) =>
 ipcMain.handle('carregar-paleta-cores', async (event, { contaId }) => {
   if (!contaId) return { success: false, error: 'ID da conta não informado' };
   try {
-    const result = await pool.query('SELECT paleta_cores FROM contas WHERE id = $1', [contaId]);
+    const result = await dbQuery('SELECT paleta_cores FROM contas WHERE id = $1', [contaId]);
     if (result.rows.length > 0 && result.rows[0].paleta_cores) {
       return { success: true, paletaCores: result.rows[0].paleta_cores };
     }
@@ -1509,7 +1521,7 @@ ipcMain.handle('criar-conta', async (event, { usuarioId, nome, tipo, descricao, 
   if (!usuarioId || !nome) return { success: false, error: 'Dados da conta inválidos.' };
 
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [usuarioId, nome.trim(), tipo || 'individual', descricao || '', cor || '#ffe192']
     );
@@ -1525,7 +1537,17 @@ ipcMain.handle('deletar-conta', async (event, { contaId, usuarioId }) => {
   if (!usuarioId || !contaId) return { success: false, error: 'Sessão inválida.' };
 
   try {
-    await pool.query(
+    // Exclui todas as despesas e receitas pertencentes a essa conta
+    await dbQuery('DELETE FROM receitas WHERE conta_id = $1 AND usuario_id = $2', [contaId, usuarioId]);
+    await dbQuery('DELETE FROM despesas WHERE conta_id = $1 AND usuario_id = $2', [contaId, usuarioId]);
+    try {
+      await dbQuery('DELETE FROM metas_orcamento WHERE conta_id = $1 AND usuario_id = $2', [contaId, usuarioId]);
+    } catch (e) {}
+    try {
+      await dbQuery('DELETE FROM configuracoes_caixinha WHERE conta_id = $1 AND usuario_id = $2', [contaId, usuarioId]);
+    } catch (e) {}
+
+    await dbQuery(
       'DELETE FROM contas WHERE id = $1 AND usuario_id = $2',
       [contaId, usuarioId]
     );
@@ -1540,7 +1562,7 @@ ipcMain.handle('carregar-etiquetas', async (event, { usuarioId }) => {
   if (!usuarioId) return ETIQUETAS_PADRAO;
 
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       'SELECT nome FROM etiquetas WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
       [usuarioId]
     );
@@ -1548,7 +1570,7 @@ ipcMain.handle('carregar-etiquetas', async (event, { usuarioId }) => {
     if (!result.rows || result.rows.length === 0) {
       let idx = 0;
       for (const etiq of ETIQUETAS_PADRAO) {
-        await pool.query(
+        await dbQuery(
           'INSERT INTO etiquetas (usuario_id, nome, ordem) VALUES ($1, $2, $3)',
           [usuarioId, etiq, idx++]
         );
@@ -1578,7 +1600,7 @@ ipcMain.handle('adicionar-etiqueta', async (event, { usuarioId, nome }) => {
 ipcMain.handle('deletar-etiqueta', async (event, { usuarioId, nome }) => {
   if (!usuarioId || !nome) return { success: false };
   try {
-    await pool.query(
+    await dbQuery(
       'DELETE FROM etiquetas WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))',
       [usuarioId, nome]
     );
@@ -1594,7 +1616,7 @@ ipcMain.handle('reordenar-etiquetas', async (event, { usuarioId, ordemEtiquetas 
   try {
     for (let i = 0; i < ordemEtiquetas.length; i++) {
       const etiqNome = ordemEtiquetas[i];
-      await pool.query(
+      await dbQuery(
         'UPDATE etiquetas SET ordem = $1 WHERE LOWER(TRIM(nome)) = LOWER(TRIM($2)) AND usuario_id = $3',
         [i, etiqNome, usuarioId]
       );
@@ -1610,7 +1632,7 @@ ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
   if (!usuarioId) return CATEGORIAS_INDIVIDUAL;
 
   try {
-    const userCheck = await pool.query(
+    const userCheck = await dbQuery(
       'SELECT id, perfil_uso FROM usuarios WHERE id = $1',
       [usuarioId]
     );
@@ -1622,7 +1644,7 @@ ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
     const perfilUso = userCheck.rows[0].perfil_uso || 'individual';
     const catPadrao = getCategoriasPadrao(perfilUso);
 
-    const result = await pool.query(
+    const result = await dbQuery(
       'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
       [usuarioId]
     );
@@ -1630,12 +1652,12 @@ ipcMain.handle('carregar-categorias', async (event, { usuarioId }) => {
     if (result.rows.length === 0) {
       let idx = 0;
       for (const cat of catPadrao) {
-        await pool.query(
+        await dbQuery(
           'INSERT INTO categorias (usuario_id, nome, cor, ordem) VALUES ($1, $2, $3, $4)',
           [usuarioId, cat.nome, cat.cor, idx++]
         );
       }
-      const newResult = await pool.query(
+      const newResult = await dbQuery(
         'SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY ordem ASC, id ASC',
         [usuarioId]
       );
@@ -1653,10 +1675,10 @@ ipcMain.handle('adicionar-categoria', async (event, { usuarioId, nome, cor }) =>
   if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   try {
-    const maxOrd = await pool.query('SELECT COALESCE(MAX(ordem), 0) as max_ord FROM categorias WHERE usuario_id = $1', [usuarioId]);
+    const maxOrd = await dbQuery('SELECT COALESCE(MAX(ordem), 0) as max_ord FROM categorias WHERE usuario_id = $1', [usuarioId]);
     const proxOrdem = (parseInt(maxOrd.rows[0]?.max_ord, 10) || 0) + 1;
 
-    await pool.query(
+    await dbQuery(
       'INSERT INTO categorias (usuario_id, nome, cor, ordem) VALUES ($1, $2, $3, $4)',
       [usuarioId, nome.trim(), cor || '#ffe192', proxOrdem]
     );
@@ -1671,7 +1693,7 @@ ipcMain.handle('reordenar-categorias', async (event, { usuarioId, ordemIds }) =>
   if (!usuarioId || !Array.isArray(ordemIds)) return { success: false };
   try {
     for (let i = 0; i < ordemIds.length; i++) {
-      await pool.query(
+      await dbQuery(
         'UPDATE categorias SET ordem = $1 WHERE id = $2 AND usuario_id = $3',
         [i, ordemIds[i], usuarioId]
       );
@@ -1687,7 +1709,7 @@ ipcMain.handle('deletar-categoria', async (event, { id, usuarioId }) => {
   if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   try {
-    await pool.query(
+    await dbQuery(
       'DELETE FROM categorias WHERE id = $1 AND usuario_id = $2',
       [id, usuarioId]
     );
@@ -1719,8 +1741,8 @@ ipcMain.handle('carregar-transacoes', async (event, { usuarioId, contaId, mes, a
     }
 
     if (filtrarConta) {
-      sqlReceitas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
-      sqlDespesas += ` AND (conta_id = $${paramIndex} OR conta_id IS NULL)`;
+      sqlReceitas += ` AND conta_id = $${paramIndex}`;
+      sqlDespesas += ` AND conta_id = $${paramIndex}`;
       args.push(contaId);
       paramIndex++;
     }
@@ -1735,8 +1757,8 @@ ipcMain.handle('carregar-transacoes', async (event, { usuarioId, contaId, mes, a
     sqlDespesas += ' ORDER BY data_transacao DESC, id DESC';
 
     const [resReceitas, resDespesas] = await Promise.all([
-      pool.query(sqlReceitas, args),
-      pool.query(sqlDespesas, args),
+      dbQuery(sqlReceitas, args),
+      dbQuery(sqlDespesas, args),
     ]);
 
     return {
@@ -1772,18 +1794,18 @@ ipcMain.handle('obter-total-caixinha', async (event, { usuarioId, contaId }) => 
   try {
     const filtrarConta = !!contaId;
     let sqlReceitas = 'SELECT mes, ano, valor FROM receitas WHERE usuario_id = $1';
-    let sqlDespesas = 'SELECT mes, ano, valor FROM despesas WHERE usuario_id = $1';
+    let sqlDespesas = 'SELECT mes, ano, valor, eh_reserva FROM despesas WHERE usuario_id = $1';
     const args = [usuarioId];
 
     if (filtrarConta) {
-      sqlReceitas += ' AND (conta_id = $2 OR conta_id IS NULL)';
-      sqlDespesas += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      sqlReceitas += ' AND conta_id = $2';
+      sqlDespesas += ' AND conta_id = $2';
       args.push(contaId);
     }
 
     const [resReceitas, resDespesas] = await Promise.all([
-      pool.query(sqlReceitas, args),
-      pool.query(sqlDespesas, args),
+      dbQuery(sqlReceitas, args),
+      dbQuery(sqlDespesas, args),
     ]);
 
     let totalReceitas = 0;
@@ -1797,7 +1819,10 @@ ipcMain.handle('obter-total-caixinha', async (event, { usuarioId, contaId }) => 
 
     (resDespesas.rows || []).forEach((row) => {
       if (isMesAnteriorAoAtual(row.mes, row.ano)) {
-        totalDespesas += parseFloat(row.valor || 0);
+        // Despesas marcadas como reserva (eh_reserva = 1) NÃO são deduzidas da Caixinha
+        if (row.eh_reserva !== 1 && row.eh_reserva !== '1') {
+          totalDespesas += parseFloat(row.valor || 0);
+        }
       }
     });
 
@@ -1816,12 +1841,16 @@ ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId })
   try {
     const filtrarConta = !!contaId;
     let sqlRec = 'SELECT mes, ano, SUM(valor) AS total_receitas FROM receitas WHERE usuario_id = $1';
-    let sqlDesp = 'SELECT mes, ano, SUM(valor) AS total_despesas FROM despesas WHERE usuario_id = $1';
+    let sqlDesp = `SELECT mes, ano, 
+                    SUM(CASE WHEN eh_reserva = 1 THEN 0 ELSE valor END) AS total_despesas,
+                    SUM(CASE WHEN eh_reserva = 1 THEN valor ELSE 0 END) AS total_reservas,
+                    SUM(valor) AS total_despesas_bruto
+                   FROM despesas WHERE usuario_id = $1`;
     const args = [usuarioId];
 
     if (filtrarConta) {
-      sqlRec += ' AND (conta_id = $2 OR conta_id IS NULL)';
-      sqlDesp += ' AND (conta_id = $2 OR conta_id IS NULL)';
+      sqlRec += ' AND conta_id = $2';
+      sqlDesp += ' AND conta_id = $2';
       args.push(contaId);
     }
 
@@ -1829,8 +1858,8 @@ ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId })
     sqlDesp += ' GROUP BY ano, mes';
 
     const [resRec, resDesp] = await Promise.all([
-      pool.query(sqlRec, args),
-      pool.query(sqlDesp, args),
+      dbQuery(sqlRec, args),
+      dbQuery(sqlDesp, args),
     ]);
 
     const mapa = {};
@@ -1843,6 +1872,8 @@ ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId })
           mes: row.mes,
           receitas: 0,
           despesas: 0,
+          reservas: 0,
+          totalDespesasBruto: 0,
           isFechada: isMesAnteriorAoAtual(row.mes, row.ano),
         };
       }
@@ -1857,10 +1888,14 @@ ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId })
           mes: row.mes,
           receitas: 0,
           despesas: 0,
+          reservas: 0,
+          totalDespesasBruto: 0,
           isFechada: isMesAnteriorAoAtual(row.mes, row.ano),
         };
       }
       mapa[key].despesas = parseFloat(row.total_despesas || 0);
+      mapa[key].reservas = parseFloat(row.total_reservas || 0);
+      mapa[key].totalDespesasBruto = parseFloat(row.total_despesas_bruto || 0);
     });
 
     const lista = Object.values(mapa).sort((a, b) => {
@@ -1874,6 +1909,14 @@ ipcMain.handle('obter-historico-caixinha', async (event, { usuarioId, contaId })
     return { success: false, historico: [] };
   }
 });
+
+function criarDataAjustada(ano, mesIndex, diaDesejado, hora = 12, min = 0) {
+  const anoNum = parseInt(ano, 10);
+  const mIndex = parseInt(mesIndex, 10);
+  const maxDiasNoMes = new Date(anoNum, mIndex + 1, 0).getDate();
+  const diaFinal = Math.min(Math.max(1, parseInt(diaDesejado, 10) || 1), maxDiasNoMes);
+  return new Date(anoNum, mIndex, diaFinal, hora, min, 0);
+}
 
 ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
   if (!novaTransacao.usuarioId) {
@@ -1896,7 +1939,21 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
 
   await salvarEtiquetaSeNova(novaTransacao.usuarioId, etiqFinal);
 
+  // Validação e resolução rápida de contaId
+  let contaIdFinal = novaTransacao.contaId ? parseInt(novaTransacao.contaId, 10) : null;
+  if (!contaIdFinal) {
+    try {
+      const contaPadraoRes = await dbQuery('SELECT id FROM contas WHERE usuario_id = $1 ORDER BY id ASC LIMIT 1', [novaTransacao.usuarioId]);
+      if (contaPadraoRes.rows.length > 0) {
+        contaIdFinal = contaPadraoRes.rows[0].id;
+      }
+    } catch (e) {}
+  }
+
   try {
+    const ehReserva = (tabela === 'despesas' && (novaTransacao.ehReserva === 1 || novaTransacao.ehReserva === true || novaTransacao.eh_reserva === 1 || novaTransacao.eh_reserva === true)) ? 1 : 0;
+    const linhasParaInserir = [];
+
     if (novaTransacao.ehFixa) {
       const mesOrigem = novaTransacao.mes || mesesList[dataFinal.getMonth()];
       const mesInicioIndex = mesesList.indexOf(mesOrigem) !== -1 ? mesesList.indexOf(mesOrigem) : dataFinal.getMonth();
@@ -1913,25 +1970,23 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
 
       while (true) {
         const mesCalculado = mesesList[m];
-        const dtDoMes = new Date(anoAtualLoop, m, diaOriginal, horaOriginal, minOriginal);
+        const dtDoMes = criarDataAjustada(anoAtualLoop, m, diaOriginal, horaOriginal, minOriginal);
 
-        await pool.query(
-          `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, $11)`,
-          [
-            novaTransacao.usuarioId,
-            novaTransacao.contaId || null,
-            novaTransacao.nome.trim(),
-            valorInserido,
-            novaTransacao.classificacao || 'Outros',
-            etiqFinal,
-            'Fixa',
-            novaTransacao.descricao || '',
-            mesCalculado,
-            anoAtualLoop.toString(),
-            dtDoMes,
-          ]
-        );
+        linhasParaInserir.push({
+          usuarioId: novaTransacao.usuarioId,
+          contaId: contaIdFinal || null,
+          nome: novaTransacao.nome.trim(),
+          valor: valorInserido,
+          classificacao: novaTransacao.classificacao || 'Outros',
+          etiqueta: etiqFinal,
+          parcelas: 'Fixa',
+          ehFixa: 1,
+          ehReserva,
+          descricao: novaTransacao.descricao || '',
+          mes: mesCalculado,
+          ano: anoAtualLoop.toString(),
+          dataTransacao: dtDoMes,
+        });
 
         if (anoAtualLoop === anoFim && m === limiteMes) break;
         if (anoAtualLoop > anoFim) break;
@@ -1942,79 +1997,107 @@ ipcMain.handle('adicionar-transacao', async (event, novaTransacao) => {
           anoAtualLoop++;
         }
       }
-      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
+    } else {
+      const parcelaAtual = parseInt(novaTransacao.parcelaAtual || '1', 10);
+      const totalParcelas = parseInt(novaTransacao.totalParcelas || '1', 10);
+
+      const valorPorParcela = (!isReceita && totalParcelas > 1 && valorInserido > 0)
+        ? Number((valorInserido / totalParcelas).toFixed(2))
+        : valorInserido;
+
+      if (totalParcelas > 1 && totalParcelas >= parcelaAtual) {
+        const diaOriginal = dataFinal.getDate();
+        const horaOriginal = dataFinal.getHours();
+        const minOriginal = dataFinal.getMinutes();
+
+        for (let k = parcelaAtual; k <= totalParcelas; k++) {
+          const offset = k - parcelaAtual;
+          const totalMeses = mesInicioIndex + offset;
+          const mesIndex = totalMeses % 12;
+          const anosAdicionais = Math.floor(totalMeses / 12);
+
+          const mesCalculado = mesesList[mesIndex];
+          const anoCalculado = (anoInicio + anosAdicionais).toString();
+          const stringParcela = `${k}/${totalParcelas}`;
+          const dtDoMes = criarDataAjustada(anoInicio + anosAdicionais, mesIndex, diaOriginal, horaOriginal, minOriginal);
+
+          linhasParaInserir.push({
+            usuarioId: novaTransacao.usuarioId,
+            contaId: contaIdFinal || null,
+            nome: novaTransacao.nome.trim(),
+            valor: valorPorParcela,
+            classificacao: novaTransacao.classificacao || 'Outros',
+            etiqueta: etiqFinal,
+            parcelas: stringParcela,
+            ehFixa: 0,
+            ehReserva,
+            descricao: novaTransacao.descricao || '',
+            mes: mesCalculado,
+            ano: anoCalculado,
+            dataTransacao: dtDoMes,
+          });
+        }
+      } else {
+        const stringParcela = `${parcelaAtual}/${totalParcelas}`;
+        linhasParaInserir.push({
+          usuarioId: novaTransacao.usuarioId,
+          contaId: contaIdFinal || null,
+          nome: novaTransacao.nome.trim(),
+          valor: valorPorParcela,
+          classificacao: novaTransacao.classificacao || 'Outros',
+          etiqueta: etiqFinal,
+          parcelas: stringParcela,
+          ehFixa: 0,
+          ehReserva,
+          descricao: novaTransacao.descricao || '',
+          mes: mesOrigem,
+          ano: anoOrigem,
+          dataTransacao: dataFinal,
+        });
+      }
     }
 
-    const parcelaAtual = parseInt(novaTransacao.parcelaAtual || '1', 10);
-    const totalParcelas = parseInt(novaTransacao.totalParcelas || '1', 10);
+    // Inserção em Batch único (1 round-trip no banco ao invés de múltiplos loops)
+    if (linhasParaInserir.length > 0) {
+      const colunas = '(usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, eh_reserva, descricao, mes, ano, data_transacao)';
+      const valueClauses = [];
+      const queryParams = [];
+      let paramCount = 1;
 
-    const valorPorParcela = (!isReceita && totalParcelas > 1 && valorInserido > 0)
-      ? Number((valorInserido / totalParcelas).toFixed(2))
-      : valorInserido;
-
-    if (totalParcelas > 1 && totalParcelas >= parcelaAtual) {
-      const diaOriginal = dataFinal.getDate();
-      const horaOriginal = dataFinal.getHours();
-      const minOriginal = dataFinal.getMinutes();
-
-      for (let k = parcelaAtual; k <= totalParcelas; k++) {
-        const offset = k - parcelaAtual;
-        const totalMeses = mesInicioIndex + offset;
-        const mesIndex = totalMeses % 12;
-        const anosAdicionais = Math.floor(totalMeses / 12);
-
-        const mesCalculado = mesesList[mesIndex];
-        const anoCalculado = (anoInicio + anosAdicionais).toString();
-        const stringParcela = `${k}/${totalParcelas}`;
-        const dtDoMes = new Date(anoInicio + anosAdicionais, mesIndex, diaOriginal, horaOriginal, minOriginal);
-
-        await pool.query(
-          `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
-          [
-            novaTransacao.usuarioId,
-            novaTransacao.contaId || null,
-            novaTransacao.nome.trim(),
-            valorPorParcela,
-            novaTransacao.classificacao || 'Outros',
-            etiqFinal,
-            stringParcela,
-            novaTransacao.descricao || '',
-            mesCalculado,
-            anoCalculado,
-            dtDoMes,
-          ]
+      for (const row of linhasParaInserir) {
+        const placeholders = [];
+        for (let i = 0; i < 13; i++) {
+          placeholders.push(`$${paramCount++}`);
+        }
+        valueClauses.push(`(${placeholders.join(', ')})`);
+        queryParams.push(
+          row.usuarioId,
+          row.contaId,
+          row.nome,
+          row.valor,
+          row.classificacao,
+          row.etiqueta,
+          row.parcelas,
+          row.ehFixa,
+          row.ehReserva,
+          row.descricao,
+          row.mes,
+          row.ano,
+          row.dataTransacao
         );
       }
-      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
-    } else {
-      const stringParcela = `${parcelaAtual}/${totalParcelas}`;
-      await pool.query(
-        `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
-        [
-          novaTransacao.usuarioId,
-          novaTransacao.contaId || null,
-          novaTransacao.nome.trim(),
-          valorPorParcela,
-          novaTransacao.classificacao || 'Outros',
-          etiqFinal,
-          stringParcela,
-          novaTransacao.descricao || '',
-          mesOrigem,
-          anoOrigem,
-          dataFinal,
-        ]
-      );
-      return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
+
+      await dbQuery(`INSERT INTO ${tabela} ${colunas} VALUES ${valueClauses.join(', ')}`, queryParams);
     }
+
+    return { success: true, mesCalculado: mesOrigem, anoCalculado: anoOrigem };
   } catch (error) {
     console.error(`Erro ao adicionar em ${tabela}:`, error);
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, classificacao, etiqueta, descricao, tipo, dataTransacao, oldNome }) => {
+ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, classificacao, etiqueta, descricao, tipo, dataTransacao, oldNome, ehReserva, eh_reserva }) => {
   if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   const tabela = getNomeTabela(tipo);
@@ -2025,35 +2108,56 @@ ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, c
   const anoOrigem = dataFinal.getFullYear().toString();
   const nomeBusca = (oldNome || nome).trim();
   const etiqFinal = etiqueta ? etiqueta.trim() : 'Geral';
+  const ehReservaVal = (tabela === 'despesas' && (ehReserva === 1 || ehReserva === true || eh_reserva === 1 || eh_reserva === true)) ? 1 : 0;
 
   await salvarEtiquetaSeNova(usuarioId, etiqFinal);
 
   try {
-    const resAtual = await pool.query(`SELECT parcelas, eh_fixa, nome FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
+    const resAtual = await dbQuery(`SELECT id, conta_id, parcelas, eh_fixa, nome FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
     const itemAtual = resAtual.rows[0];
 
     const isFixaOuParcelada = itemAtual && (itemAtual.eh_fixa === 1 || (itemAtual.parcelas && itemAtual.parcelas !== '1/1'));
 
     if (isFixaOuParcelada && nomeBusca) {
-      await pool.query(
-        `UPDATE ${tabela}
-         SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5
-         WHERE usuario_id = $6 AND LOWER(TRIM(nome)) = LOWER(TRIM($7))`,
-        [
-          nome.trim(),
-          parseFloat(valor || 0),
-          classificacao || 'Outros',
-          etiqFinal,
-          descricao || '',
-          usuarioId,
-          nomeBusca,
-        ]
-      );
+      if (itemAtual?.conta_id) {
+        await dbQuery(
+          `UPDATE ${tabela}
+           SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5, eh_reserva = $6
+           WHERE usuario_id = $7 AND conta_id = $8 AND LOWER(TRIM(nome)) = LOWER(TRIM($9))`,
+          [
+            nome.trim(),
+            parseFloat(valor || 0),
+            classificacao || 'Outros',
+            etiqFinal,
+            descricao || '',
+            ehReservaVal,
+            usuarioId,
+            itemAtual.conta_id,
+            nomeBusca,
+          ]
+        );
+      } else {
+        await dbQuery(
+          `UPDATE ${tabela}
+           SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5, eh_reserva = $6
+           WHERE usuario_id = $7 AND LOWER(TRIM(nome)) = LOWER(TRIM($8))`,
+          [
+            nome.trim(),
+            parseFloat(valor || 0),
+            classificacao || 'Outros',
+            etiqFinal,
+            descricao || '',
+            ehReservaVal,
+            usuarioId,
+            nomeBusca,
+          ]
+        );
+      }
     } else {
-      await pool.query(
+      await dbQuery(
         `UPDATE ${tabela}
-         SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5, mes = $6, ano = $7, data_transacao = $8
-         WHERE id = $9 AND usuario_id = $10`,
+         SET nome = $1, valor = $2, classificacao = $3, etiqueta = $4, descricao = $5, mes = $6, ano = $7, data_transacao = $8, eh_reserva = $9
+         WHERE id = $10 AND usuario_id = $11`,
         [
           nome.trim(),
           parseFloat(valor || 0),
@@ -2063,6 +2167,7 @@ ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, c
           mesOrigem,
           anoOrigem,
           dataFinal,
+          ehReservaVal,
           id,
           usuarioId,
         ]
@@ -2076,25 +2181,52 @@ ipcMain.handle('editar-transacao', async (event, { id, usuarioId, nome, valor, c
   }
 });
 
-ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, nome, tipo, parcelaNum, ehFixa, mes }) => {
+ipcMain.handle('deletar-transacao', async (event, params) => {
+  if (!params) return { success: false, error: 'Parâmetros inválidos.' };
+
+  const id = typeof params.id === 'object' && params.id !== null ? params.id.id : params.id;
+  const usuarioId = params.usuarioId;
+  const deletarModo = params.deletarModo;
+  const nome = params.nome;
+  const tipo = params.tipo;
+  const parcelaNum = params.parcelaNum;
+  const ehFixa = params.ehFixa;
+  const mes = params.mes;
+
   if (!usuarioId) return { success: false, error: 'Sessão inválida.' };
 
   const tabela = getNomeTabela(tipo);
   const mesesList = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
   try {
+    let itemContaId = null;
+    if (id) {
+      const resItem = await dbQuery(`SELECT conta_id FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
+      if (resItem.rows.length > 0) {
+        itemContaId = resItem.rows[0].conta_id;
+      }
+    }
+
     if (deletarModo === 'todas' && nome) {
-      await pool.query(
-        `DELETE FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
-        [usuarioId, nome.trim()]
-      );
+      if (itemContaId) {
+        await dbQuery(
+          `DELETE FROM ${tabela} WHERE usuario_id = $1 AND conta_id = $2 AND LOWER(TRIM(nome)) = LOWER(TRIM($3))`,
+          [usuarioId, itemContaId, nome.trim()]
+        );
+      } else {
+        await dbQuery(
+          `DELETE FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
+          [usuarioId, nome.trim()]
+        );
+      }
     } else if (deletarModo === 'posteriores' && nome) {
       if (ehFixa && mes) {
         const mesIndex = mesesList.indexOf(mes);
-        const result = await pool.query(
-          `SELECT id, mes FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
-          [usuarioId, nome.trim()]
-        );
+        const sqlBusca = itemContaId
+          ? `SELECT id, mes FROM ${tabela} WHERE usuario_id = $1 AND conta_id = $2 AND LOWER(TRIM(nome)) = LOWER(TRIM($3))`
+          : `SELECT id, mes FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`;
+        const argsBusca = itemContaId ? [usuarioId, itemContaId, nome.trim()] : [usuarioId, nome.trim()];
+        const result = await dbQuery(sqlBusca, argsBusca);
 
         const idsParaDeletar = result.rows
           .filter((row) => {
@@ -2104,13 +2236,14 @@ ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, 
           .map((row) => row.id);
 
         for (const rowId of idsParaDeletar) {
-          await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
+          await dbQuery(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
         }
       } else if (parcelaNum) {
-        const result = await pool.query(
-          `SELECT id, parcelas FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`,
-          [usuarioId, nome.trim()]
-        );
+        const sqlBusca = itemContaId
+          ? `SELECT id, parcelas FROM ${tabela} WHERE usuario_id = $1 AND conta_id = $2 AND LOWER(TRIM(nome)) = LOWER(TRIM($3))`
+          : `SELECT id, parcelas FROM ${tabela} WHERE usuario_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2))`;
+        const argsBusca = itemContaId ? [usuarioId, itemContaId, nome.trim()] : [usuarioId, nome.trim()];
+        const result = await dbQuery(sqlBusca, argsBusca);
 
         const idsParaDeletar = result.rows
           .filter((row) => {
@@ -2120,13 +2253,13 @@ ipcMain.handle('deletar-transacao', async (event, { id, usuarioId, deletarModo, 
           .map((row) => row.id);
 
         for (const rowId of idsParaDeletar) {
-          await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
+          await dbQuery(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [rowId, usuarioId]);
         }
       } else {
-        await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
+        await dbQuery(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
       }
     } else {
-      await pool.query(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
+      await dbQuery(`DELETE FROM ${tabela} WHERE id = $1 AND usuario_id = $2`, [id, usuarioId]);
     }
     return { success: true };
   } catch (error) {
@@ -2141,35 +2274,59 @@ ipcMain.handle('importar-transacoes-nubank-csv', async (event, { usuarioId, cont
     return { success: false, error: 'Parâmetros inválidos ou lista de transações vazia.' };
   }
 
-  const client = await pool.connect();
   let inseridosCount = 0;
 
   try {
-    await client.query('BEGIN');
+    // 1. Validação e resolução segura da conta destino
+    let contaIdFinal = contaId ? parseInt(contaId, 10) : null;
+    if (contaIdFinal) {
+      const checkConta = await dbQuery('SELECT id FROM contas WHERE id = $1 AND usuario_id = $2', [contaIdFinal, usuarioId]);
+      if (checkConta.rows.length === 0) {
+        contaIdFinal = null;
+      }
+    }
 
-    await salvarEtiquetaSeNova(usuarioId, 'Cartão Nubank');
+    if (!contaIdFinal) {
+      const contaPadraoRes = await dbQuery('SELECT id FROM contas WHERE usuario_id = $1 ORDER BY id ASC LIMIT 1', [usuarioId]);
+      if (contaPadraoRes.rows.length > 0) {
+        contaIdFinal = contaPadraoRes.rows[0].id;
+      } else {
+        const resNovaConta = await dbQuery(
+          'INSERT INTO contas (usuario_id, nome, tipo, descricao, cor) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+          [usuarioId, 'Conta Nubank', 'individual', 'Conta padrão', '#9d4edd']
+        );
+        if (resNovaConta.rows.length > 0) {
+          contaIdFinal = resNovaConta.rows[0].id;
+        }
+      }
+    }
 
     for (const item of transacoes) {
-      if (item.isDuplicado) continue;
+      if (item.isDuplicado || item.selecionado === false) continue;
 
       const tabela = item.tipo === 'receitas' ? 'receitas' : 'despesas';
       const valorNum = parseFloat(item.valor || 0);
       const cat = item.classificacao || 'Nubank';
-      const etiq = item.etiqueta || 'Cartão Nubank';
+      const etiq = item.etiqueta || 'Nubank';
       const dtTransacao = item.dataTransacao ? new Date(item.dataTransacao) : new Date();
+      const descCompleta = item.descricao || item.nomeRaw || 'Importado via CSV Nubank';
 
-      await client.query(
+      if (etiq) {
+        await salvarEtiquetaSeNova(usuarioId, etiq);
+      }
+
+      await dbQuery(
         `INSERT INTO ${tabela} (usuario_id, conta_id, nome, valor, classificacao, etiqueta, parcelas, eh_fixa, descricao, mes, ano, data_transacao)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)`,
         [
           usuarioId,
-          contaId || null,
+          contaIdFinal || null,
           (item.nome || item.nomeRaw || 'Transação Nubank').trim(),
           valorNum,
           cat,
           etiq,
           item.parcelas || '1/1',
-          'Importado via CSV Nubank',
+          descCompleta,
           item.mes,
           item.ano,
           dtTransacao,
@@ -2178,14 +2335,10 @@ ipcMain.handle('importar-transacoes-nubank-csv', async (event, { usuarioId, cont
       inseridosCount++;
     }
 
-    await client.query('COMMIT');
     return { success: true, inseridosCount };
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Erro ao importar CSV do Nubank em lote:', error);
     return { success: false, error: error.message };
-  } finally {
-    client.release();
   }
 });
 
@@ -2483,6 +2636,121 @@ ipcMain.handle('exportar-pdf', async (event, { receitasList = [], despesasList =
   }
 });
 
+// --- SISTEMA DE ATUALIZAÇÕES AUTOMÁTICAS (GITHUB RELEASES) ---
+function limparNumeroVersao(str) {
+  if (!str) return '0.0.0';
+  return str.toString().replace(/^v/i, '').trim();
+}
+
+function ehVersaoMaisRecente(versaoAtual, versaoRemota) {
+  const vAtualPartes = limparNumeroVersao(versaoAtual).split('.').map((n) => parseInt(n, 10) || 0);
+  const vRemotaPartes = limparNumeroVersao(versaoRemota).split('.').map((n) => parseInt(n, 10) || 0);
+
+  const tamanhoMax = Math.max(vAtualPartes.length, vRemotaPartes.length);
+  for (let i = 0; i < tamanhoMax; i++) {
+    const parteAtual = vAtualPartes[i] || 0;
+    const parteRemota = vRemotaPartes[i] || 0;
+    if (parteRemota > parteAtual) return true;
+    if (parteRemota < parteAtual) return false;
+  }
+  return false;
+}
+
+async function checarAtualizacaoGithub() {
+  const versaoAtual = app.getVersion() || '1.0.1';
+  try {
+    const urlApi = 'https://api.github.com/repos/EmanuellCarvalhoPires/gestorOrcamento/releases/latest';
+    const resposta = await fetch(urlApi, {
+      headers: {
+        'User-Agent': 'SimpleFinances-DesktopApp',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (resposta.status === 404) {
+      return {
+        success: true,
+        temAtualizacao: false,
+        versaoAtual,
+        mensagem: 'Nenhuma versão lançada no GitHub ainda.',
+      };
+    }
+
+    if (!resposta.ok) {
+      throw new Error(`GitHub API retornou código ${resposta.status}`);
+    }
+
+    const releaseData = await resposta.json();
+    const versaoRemota = releaseData.tag_name || '';
+    const temNovaVersao = ehVersaoMaisRecente(versaoAtual, versaoRemota);
+
+    // Identifica o link de download direto do instalador Windows (.exe)
+    let urlDownload = releaseData.html_url;
+    let nomeArquivoExe = 'Simple Finances Setup.exe';
+    let tamanhoBytes = 0;
+
+    if (Array.isArray(releaseData.assets) && releaseData.assets.length > 0) {
+      const assetExe = releaseData.assets.find(
+        (asset) => asset.name && asset.name.toLowerCase().endsWith('.exe')
+      );
+      if (assetExe) {
+        urlDownload = assetExe.browser_download_url;
+        nomeArquivoExe = assetExe.name;
+        tamanhoBytes = assetExe.size || 0;
+      } else {
+        urlDownload = releaseData.assets[0].browser_download_url || releaseData.html_url;
+        nomeArquivoExe = releaseData.assets[0].name;
+      }
+    }
+
+    return {
+      success: true,
+      temAtualizacao: temNovaVersao,
+      versaoAtual,
+      versaoMaisRecente: releaseData.tag_name,
+      titulo: releaseData.name || `Versão ${releaseData.tag_name}`,
+      notas: releaseData.body || 'Melhorias gerais de desempenho, segurança e estabilidade.',
+      dataPublicacao: releaseData.published_at,
+      urlDownload,
+      urlRelease: releaseData.html_url,
+      nomeArquivoExe,
+      tamanhoBytes,
+    };
+  } catch (err) {
+    console.warn('⚠️ [Atualizações] Falha ao verificar releases do GitHub:', err.message);
+    return {
+      success: false,
+      temAtualizacao: false,
+      versaoAtual,
+      error: err.message,
+    };
+  }
+}
+
+ipcMain.handle('verificar-atualizacao', async () => {
+  return await checarAtualizacaoGithub();
+});
+
+ipcMain.handle('abrir-url-externa', async (event, url) => {
+  if (url && typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (err) {
+      console.error('Erro ao abrir URL externa:', err);
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: 'URL externa inválida ou protocolo inseguro.' };
+});
+
+ipcMain.handle('obter-versao-app', () => {
+  return { version: app.getVersion() || '1.0.1' };
+});
+
+// Registra os IPCs do serviço de Auto-Update nativo
+registerUpdaterIpc();
+
 const createWindow = () => {
   const iconCandidates = [
     path.join(process.resourcesPath || '', 'images', 'app_icon.png'),
@@ -2514,6 +2782,9 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  // Conecta o auto-updater à janela principal
+  initAutoUpdater(mainWindow);
 
   if (finalIcon) {
     try {
