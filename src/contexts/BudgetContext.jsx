@@ -353,9 +353,10 @@ export const BudgetProvider = ({ children }) => {
     }
   }, []);
 
-  const baixarAtualizacaoNativa = async () => {
+  const baixarAtualizacaoNativa = async (urlDownloadCustom) => {
+    const url = urlDownloadCustom || updateDisponivel?.urlDownload;
     if (window.electronAPI?.downloadUpdate) {
-      return await window.electronAPI.downloadUpdate();
+      return await window.electronAPI.downloadUpdate(url);
     }
     return { success: false, error: 'API não disponível' };
   };

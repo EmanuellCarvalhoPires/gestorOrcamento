@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld('apiTurso', {
 contextBridge.exposeInMainWorld('electronAPI', {
   getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
   checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
-  downloadUpdate: () => ipcRenderer.invoke('updater:downloadUpdate'),
+  downloadUpdate: (fallbackUrl) => ipcRenderer.invoke('updater:downloadUpdate', fallbackUrl),
   quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
   openExternalUrl: (url) => ipcRenderer.invoke('abrir-url-externa', url),
   getAppVersion: () => ipcRenderer.invoke('obter-versao-app'),

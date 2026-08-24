@@ -1,8 +1,8 @@
-version: 1.1.4
+version: 1.1.5
 files:
-  - url: Simple-Finances-Setup-1.1.4.exe
-    sha512: B2lliMXs6GhisHNs+fsleb4EKODm4cIMlCO5JwHuPWecQaRspQVhccRMaUp4Zxq7hEccoNqLcmMPKhO5u+bvIQ==
-    size: 103973036
-path: Simple-Finances-Setup-1.1.4.exe
-sha512: B2lliMXs6GhisHNs+fsleb4EKODm4cIMlCO5JwHuPWecQaRspQVhccRMaUp4Zxq7hEccoNqLcmMPKhO5u+bvIQ==
-releaseDate: '2026-08-24T14:56:04.343Z'
+  - url: Simple-Finances-Setup-1.1.5.exe
+    sha512: 16UgllBsO32QDvLFlmkEM/oHPAdl8g1xJG3cypbLsSrLax7+U38F4COKjjEYyQQLvssCaaGmbYANCs87oC1wCQ==
+    size: 103973802
+path: Simple-Finances-Setup-1.1.5.exe
+sha512: 16UgllBsO32QDvLFlmkEM/oHPAdl8g1xJG3cypbLsSrLax7+U38F4COKjjEYyQQLvssCaaGmbYANCs87oC1wCQ==
+releaseDate: '2026-08-24T15:50:21.943Z'

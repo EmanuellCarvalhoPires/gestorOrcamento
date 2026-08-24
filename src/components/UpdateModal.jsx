@@ -25,20 +25,21 @@ export default function UpdateModal({
   const progresso = updateStatus?.progress || 0;
 
   const handleBaixarAtualizacao = async () => {
+    const linkAlvo = updateData?.urlDownload || updateData?.urlRelease;
     if (onDownloadUpdate) {
-      const res = await onDownloadUpdate();
+      const res = await onDownloadUpdate(linkAlvo);
       if (res?.success !== false) return;
     }
 
-    // Fallback: abre no navegador se o download nativo do electron-updater não iniciar
+    // Fallback: abre no navegador se o download nativo falhar completamente
     setDownloadIniciadoWeb(true);
-    const linkAlvo = updateData?.urlDownload || updateData?.urlRelease || 'https://github.com/EmanuellCarvalhoPires/gestorOrcamento/releases/latest';
+    const fallbackLink = linkAlvo || 'https://github.com/EmanuellCarvalhoPires/gestorOrcamento/releases/latest';
     if (window.electronAPI?.openExternalUrl) {
-      await window.electronAPI.openExternalUrl(linkAlvo);
+      await window.electronAPI.openExternalUrl(fallbackLink);
     } else if (window.apiTurso?.abrirUrlExterna) {
-      await window.apiTurso.abrirUrlExterna(linkAlvo);
+      await window.apiTurso.abrirUrlExterna(fallbackLink);
     } else {
-      window.open(linkAlvo, '_blank');
+      window.open(fallbackLink, '_blank');
     }
   };
 
