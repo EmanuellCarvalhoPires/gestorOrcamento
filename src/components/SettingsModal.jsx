@@ -48,6 +48,7 @@ export default function SettingsModal({
     verificandoUpdate,
     mensagemUpdate,
     verificarAtualizacoesManual,
+    forcarBuscaEAtualizacao,
     setIsUpdateModalOpen,
     baixarAtualizacaoNativa,
     reiniciarEAplicarAtualizacao,
@@ -2774,29 +2775,29 @@ export default function SettingsModal({
 
                     <button
                       type="button"
-                      onClick={verificarAtualizacoesManual}
-                      disabled={verificandoUpdate}
+                      onClick={() => forcarBuscaEAtualizacao(true)}
+                      disabled={verificandoUpdate || updateStatus?.state === 'downloading'}
                       style={{
                         backgroundColor: 'var(--accent-color, #ffe192)',
                         color: 'var(--accent-text, #333333)',
                         border: 'none',
-                        padding: '10px 20px',
+                        padding: '10px 22px',
                         borderRadius: '12px',
                         fontSize: '13px',
                         fontWeight: 'bold',
-                        cursor: verificandoUpdate ? 'not-allowed' : 'pointer',
+                        cursor: (verificandoUpdate || updateStatus?.state === 'downloading') ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px',
                         boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                        opacity: verificandoUpdate ? 0.7 : 1,
+                        opacity: (verificandoUpdate || updateStatus?.state === 'downloading') ? 0.7 : 1,
                         transition: 'filter 0.2s',
                       }}
                       onMouseEnter={(e) => !verificandoUpdate && (e.target.style.filter = 'brightness(1.08)')}
                       onMouseLeave={(e) => (e.target.style.filter = 'none')}
                     >
-                      <span>{verificandoUpdate ? '⏳' : '🔍'}</span>
-                      <span>{verificandoUpdate ? 'Verificando...' : 'Buscar Atualizações Agora'}</span>
+                      <span>{verificandoUpdate ? '⏳' : '⚡'}</span>
+                      <span>{verificandoUpdate ? 'Verificando no GitHub...' : 'Forçar Busca de Atualizações'}</span>
                     </button>
                   </div>
 
@@ -2819,8 +2820,95 @@ export default function SettingsModal({
                     </div>
                   )}
 
-                  {/* Card de Destaque caso haja nova versão */}
-                  {updateDisponivel?.temAtualizacao && (
+                  {/* Progresso de Download em Andamento */}
+                  {updateStatus?.state === 'downloading' && (
+                    <div
+                      style={{
+                        backgroundColor: 'rgba(42, 157, 143, 0.12)',
+                        border: '1px solid #2a9d8f',
+                        borderRadius: '14px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                        <span style={{ color: '#ffffff', fontWeight: 'bold' }}>⏳ Baixando atualização em segundo plano...</span>
+                        <span style={{ color: 'var(--accent-color, #ffe192)', fontWeight: 'bold' }}>
+                          {updateStatus.progress || 0}%
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '10px',
+                          backgroundColor: '#2b2b2b',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${updateStatus.progress || 0}%`,
+                            backgroundColor: '#2a9d8f',
+                            borderRadius: '8px',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Download Concluído - Botão para Reiniciar */}
+                  {updateStatus?.state === 'downloaded' && (
+                    <div
+                      style={{
+                        backgroundColor: 'rgba(42, 157, 143, 0.2)',
+                        border: '1px solid #2a9d8f',
+                        borderRadius: '14px',
+                        padding: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontSize: '12px', color: '#c4f1e9', fontWeight: 'bold' }}>ATUALIZAÇÃO PRONTA:</span>
+                        <h5 style={{ margin: '2px 0 0 0', fontSize: '16px', color: '#ffffff' }}>
+                          Download concluído com sucesso!
+                        </h5>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={reiniciarEAplicarAtualizacao}
+                        style={{
+                          backgroundColor: '#2a9d8f',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '10px 20px',
+                          borderRadius: '10px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        }}
+                      >
+                        <span>🔄</span>
+                        <span>Reiniciar e Aplicar Atualização</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Card de Destaque caso haja nova versão disponível e não esteja baixada ainda */}
+                  {updateDisponivel?.temAtualizacao && updateStatus?.state !== 'downloaded' && (
                     <div
                       style={{
                         backgroundColor: 'rgba(231, 111, 81, 0.12)',
@@ -2840,26 +2928,29 @@ export default function SettingsModal({
                           </h5>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setIsUpdateModalOpen(true)}
-                          style={{
-                            backgroundColor: '#2a9d8f',
-                            color: '#ffffff',
-                            border: 'none',
-                            padding: '8px 18px',
-                            borderRadius: '10px',
-                            fontSize: '13px',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                          }}
-                        >
-                          <span>📥</span>
-                          <span>Baixar e Atualizar</span>
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setIsUpdateModalOpen(true)}
+                            style={{
+                              backgroundColor: '#2a9d8f',
+                              color: '#ffffff',
+                              border: 'none',
+                              padding: '8px 18px',
+                              borderRadius: '10px',
+                              fontSize: '13px',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            }}
+                          >
+                            <span>📥</span>
+                            <span>Baixar e Atualizar Agora</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

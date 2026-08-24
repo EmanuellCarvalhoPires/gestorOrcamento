@@ -366,49 +366,56 @@ export const BudgetProvider = ({ children }) => {
     }
   };
 
-  const verificarAtualizacoesManual = async () => {
+  const forcarBuscaEAtualizacao = async (abrirModalSeDisponivel = true) => {
+    try {
+      localStorage.removeItem('@gestor_update_ignorado');
+    } catch (e) {}
+
     setVerificandoUpdate(true);
-    setMensagemUpdate('');
-    
-    // Tenta primeiro via electron-updater nativo
+    setMensagemUpdate('🔍 Consultando GitHub Releases em tempo real...');
+
+    // 1. Tenta disparar electron-updater nativo
     if (window.electronAPI?.checkForUpdates) {
       try {
-        const resNativo = await window.electronAPI.checkForUpdates();
-        setVerificandoUpdate(false);
-        if (resNativo?.error) {
-          setMensagemUpdate(resNativo.error);
-          return resNativo;
-        }
+        await window.electronAPI.checkForUpdates();
       } catch (e) {
-        // Prossegue para fallback
+        console.warn('Erro ao chamar checkForUpdates nativo:', e);
       }
     }
 
-    if (!window.apiTurso?.verificarAtualizacao) {
-      setVerificandoUpdate(false);
-      return { success: false, error: 'Funcionalidade disponível apenas no aplicativo instalado.' };
+    // 2. Consulta a API pública do GitHub como fonte garantida
+    if (window.apiTurso?.verificarAtualizacao) {
+      try {
+        const res = await window.apiTurso.verificarAtualizacao();
+        setVerificandoUpdate(false);
+        if (res?.success && res.temAtualizacao) {
+          setUpdateDisponivel(res);
+          if (abrirModalSeDisponivel) {
+            setIsUpdateModalOpen(true);
+          }
+          setMensagemUpdate(`🚀 Nova versão ${res.versaoMaisRecente} disponível para download!`);
+          return res;
+        } else if (res?.success && !res.temAtualizacao) {
+          setMensagemUpdate(`✅ Seu aplicativo já está atualizado na versão mais recente (${res.versaoAtual || 'v1.1.1'}).`);
+          return res;
+        } else {
+          setMensagemUpdate(res?.error || 'Não foi possível verificar atualizações no momento.');
+          return res;
+        }
+      } catch (err) {
+        setVerificandoUpdate(false);
+        setMensagemUpdate('Falha ao conectar aos servidores do GitHub.');
+        return { success: false, error: err.message };
+      }
     }
 
-    try {
-      const res = await window.apiTurso.verificarAtualizacao();
-      setVerificandoUpdate(false);
-      if (res?.success && res.temAtualizacao) {
-        setUpdateDisponivel(res);
-        setIsUpdateModalOpen(true);
-        setMensagemUpdate(`🚀 Nova versão ${res.versaoMaisRecente} disponível!`);
-        return res;
-      } else if (res?.success && !res.temAtualizacao) {
-        setMensagemUpdate(`✅ Você já está utilizando a versão mais recente (${res.versaoAtual || 'v1.0.1'}).`);
-        return res;
-      } else {
-        setMensagemUpdate(res?.error || 'Não foi possível verificar atualizações no momento.');
-        return res;
-      }
-    } catch (err) {
-      setVerificandoUpdate(false);
-      setMensagemUpdate('Falha ao conectar aos servidores do GitHub.');
-      return { success: false, error: err.message };
-    }
+    setVerificandoUpdate(false);
+    setMensagemUpdate('API de atualização indisponível.');
+    return { success: false, error: 'API indisponível' };
+  };
+
+  const verificarAtualizacoesManual = async () => {
+    return await forcarBuscaEAtualizacao(true);
   };
 
   // Verificação Automática ao Entrar no Aplicativo (executa após 2.5 segundos)
@@ -1217,6 +1224,7 @@ export const BudgetProvider = ({ children }) => {
         verificandoUpdate,
         mensagemUpdate,
         verificarAtualizacoesManual,
+        forcarBuscaEAtualizacao,
         ignorarVersaoUpdate,
         baixarAtualizacaoNativa,
         reiniciarEAplicarAtualizacao,
