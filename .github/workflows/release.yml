@@ -36,7 +36,28 @@ jobs:
       - name: Build Electron App Bundles
         run: npm run build
 
-      - name: Build and Publish Release to GitHub
+      - name: Build and Package Windows App
+        run: npx electron-builder --config electron-builder.json
+
+      - name: Extract App Version
+        id: get_version
+        shell: bash
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          echo "version=v$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$APP_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Publish Official GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Simple Finances ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist_installer/*.exe
+            dist_installer/*.blockmap
+            dist_installer/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --config electron-builder.json --publish always
