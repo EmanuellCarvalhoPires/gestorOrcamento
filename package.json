@@ -9,10 +9,10 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "node -e \"try { require('fs').rmSync('out', { recursive: true, force: true }); } catch (e) {}\" && electron-forge make",
-    "build": "vite build",
-    "build:nsis": "npx vite build && electron-builder --config electron-builder.json",
+    "build": "electron-forge package",
+    "build:nsis": "npm run build && electron-builder --config electron-builder.json",
     "dist": "npm run build:nsis",
-    "release": "npx vite build && electron-builder --config electron-builder.json --publish always",
+    "release": "npm run build && electron-builder --config electron-builder.json --publish always",
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\""
   },

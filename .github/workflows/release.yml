@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Vite Renderer
+      - name: Build Electron App Bundles
         run: npm run build
 
       - name: Build and Publish Release to GitHub
