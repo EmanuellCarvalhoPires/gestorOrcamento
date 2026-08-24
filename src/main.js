@@ -2659,11 +2659,16 @@ function ehVersaoMaisRecente(versaoAtual, versaoRemota) {
 async function checarAtualizacaoGithub() {
   const versaoAtual = app.getVersion() || '1.0.1';
   try {
-    const urlApi = 'https://api.github.com/repos/EmanuellCarvalhoPires/gestorOrcamento/releases/latest';
+    const timestamp = Date.now();
+    // Consulta a lista das releases mais recentes com cabeçalhos estritos anti-cache
+    const urlApi = `https://api.github.com/repos/EmanuellCarvalhoPires/gestorOrcamento/releases?per_page=10&_t=${timestamp}`;
     const resposta = await fetch(urlApi, {
       headers: {
         'User-Agent': 'SimpleFinances-DesktopApp',
         'Accept': 'application/vnd.github.v3+json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
 
@@ -2680,17 +2685,46 @@ async function checarAtualizacaoGithub() {
       throw new Error(`GitHub API retornou código ${resposta.status}`);
     }
 
-    const releaseData = await resposta.json();
-    const versaoRemota = releaseData.tag_name || '';
+    const releasesList = await resposta.json();
+    if (!Array.isArray(releasesList) || releasesList.length === 0) {
+      return {
+        success: true,
+        temAtualizacao: false,
+        versaoAtual,
+        mensagem: 'Nenhuma versão encontrada.',
+      };
+    }
+
+    // Filtra apenas releases públicas (não rascunhos e não pré-releases)
+    const releasesValidas = releasesList.filter((r) => !r.draft && !r.prerelease);
+    if (releasesValidas.length === 0) {
+      return {
+        success: true,
+        temAtualizacao: false,
+        versaoAtual,
+        mensagem: 'Nenhuma release oficial publicada.',
+      };
+    }
+
+    // Obtém a release com a maior versão semântica
+    let releaseMaisRecente = releasesValidas[0];
+    for (let i = 1; i < releasesValidas.length; i++) {
+      const candidata = releasesValidas[i];
+      if (ehVersaoMaisRecente(releaseMaisRecente.tag_name, candidata.tag_name)) {
+        releaseMaisRecente = candidata;
+      }
+    }
+
+    const versaoRemota = releaseMaisRecente.tag_name || '';
     const temNovaVersao = ehVersaoMaisRecente(versaoAtual, versaoRemota);
 
     // Identifica o link de download direto do instalador Windows (.exe)
-    let urlDownload = releaseData.html_url;
+    let urlDownload = releaseMaisRecente.html_url;
     let nomeArquivoExe = 'Simple Finances Setup.exe';
     let tamanhoBytes = 0;
 
-    if (Array.isArray(releaseData.assets) && releaseData.assets.length > 0) {
-      const assetExe = releaseData.assets.find(
+    if (Array.isArray(releaseMaisRecente.assets) && releaseMaisRecente.assets.length > 0) {
+      const assetExe = releaseMaisRecente.assets.find(
         (asset) => asset.name && asset.name.toLowerCase().endsWith('.exe')
       );
       if (assetExe) {
@@ -2698,8 +2732,8 @@ async function checarAtualizacaoGithub() {
         nomeArquivoExe = assetExe.name;
         tamanhoBytes = assetExe.size || 0;
       } else {
-        urlDownload = releaseData.assets[0].browser_download_url || releaseData.html_url;
-        nomeArquivoExe = releaseData.assets[0].name;
+        urlDownload = releaseMaisRecente.assets[0].browser_download_url || releaseMaisRecente.html_url;
+        nomeArquivoExe = releaseMaisRecente.assets[0].name;
       }
     }
 
@@ -2707,12 +2741,12 @@ async function checarAtualizacaoGithub() {
       success: true,
       temAtualizacao: temNovaVersao,
       versaoAtual,
-      versaoMaisRecente: releaseData.tag_name,
-      titulo: releaseData.name || `Versão ${releaseData.tag_name}`,
-      notas: releaseData.body || 'Melhorias gerais de desempenho, segurança e estabilidade.',
-      dataPublicacao: releaseData.published_at,
+      versaoMaisRecente: releaseMaisRecente.tag_name,
+      titulo: releaseMaisRecente.name || `Versão ${releaseMaisRecente.tag_name}`,
+      notas: releaseMaisRecente.body || 'Melhorias gerais de desempenho, segurança e estabilidade.',
+      dataPublicacao: releaseMaisRecente.published_at,
       urlDownload,
-      urlRelease: releaseData.html_url,
+      urlRelease: releaseMaisRecente.html_url,
       nomeArquivoExe,
       tamanhoBytes,
     };
