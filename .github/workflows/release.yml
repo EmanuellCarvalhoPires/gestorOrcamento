@@ -17,6 +17,9 @@ jobs:
   release:
     name: Build & Publish Windows App
     runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -37,7 +40,7 @@ jobs:
         run: npm run build
 
       - name: Build and Package Windows App
-        run: npx electron-builder --config electron-builder.json
+        run: npx electron-builder --config electron-builder.json --publish never
 
       - name: Extract App Version
         id: get_version
