@@ -1,7 +1,7 @@
 {
   "name": "simple-finances",
   "productName": "Simple Finances",
-  "version": "1.1.6",
+  "version": "1.1.8",
   "description": "Simple Finances - Gestão Financeira Pessoal",
   "main": ".vite/build/main.js",
   "private": true,

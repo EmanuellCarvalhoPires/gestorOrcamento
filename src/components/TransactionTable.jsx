@@ -128,71 +128,167 @@ export default function TransactionTable() {
     { value: 'valor_asc', label: '💲 Menor Valor' },
     { value: 'nome_asc', label: '🔤 Nome (A - Z)' },
     { value: 'nome_desc', label: '🔤 Nome (Z - A)' },
+    { value: 'classificacao_asc', label: isComercial ? '📂 Categoria (A - Z)' : '📂 Classificação (A - Z)' },
+    { value: 'classificacao_desc', label: isComercial ? '📂 Categoria (Z - A)' : '📂 Classificação (Z - A)' },
     { value: 'etiqueta_asc', label: '🏷️ Etiqueta (A - Z)' },
     { value: 'etiqueta_desc', label: '🏷️ Etiqueta (Z - A)' },
   ];
 
   const itemOrdemAtual = opcoesOrdem.find((o) => o.value === ordem) || opcoesOrdem[0];
 
-  // Função auxiliar para verificar se o lançamento é parcelado ou recorrente
-  const isSpecialItem = (t) => {
-    if (!t) return false;
-    if (t.eh_fixa === 1) return true;
-    if (t.parcelas && typeof t.parcelas === 'string' && t.parcelas.includes('/')) {
-      const partes = t.parcelas.split('/');
-      const total = parseInt(partes[1], 10);
-      if (!isNaN(total) && total > 1) return true;
+  const handleHeaderSort = (campo) => {
+    switch (campo) {
+      case 'data':
+        setOrdem((prev) => (prev === 'recente' ? 'antigo' : 'recente'));
+        break;
+      case 'nome':
+        setOrdem((prev) => (prev === 'nome_asc' ? 'nome_desc' : 'nome_asc'));
+        break;
+      case 'classificacao':
+        setOrdem((prev) => (prev === 'classificacao_asc' ? 'classificacao_desc' : 'classificacao_asc'));
+        break;
+      case 'etiqueta':
+        setOrdem((prev) => (prev === 'etiqueta_asc' ? 'etiqueta_desc' : 'etiqueta_asc'));
+        break;
+      case 'parcelas':
+        setOrdem((prev) => (prev === 'parcelas_asc' ? 'parcelas_desc' : 'parcelas_asc'));
+        break;
+      case 'valor':
+        setOrdem((prev) => (prev === 'valor_desc' ? 'valor_asc' : 'valor_desc'));
+        break;
+      default:
+        break;
     }
-    return false;
   };
 
-  // Aplicação da Ordenação Priorizando Lançamentos Parcelados e Recorrentes
-  const transacoesOrdenadas = [...transacoesFiltradasPelaBusca].sort((a, b) => {
-    const aSpec = isSpecialItem(a) ? 0 : 1;
-    const bSpec = isSpecialItem(b) ? 0 : 1;
+  const renderSortIcon = (campo) => {
+    let isActive = false;
+    let isAsc = false;
 
-    // Ordenação por Etiqueta (A-Z ou Z-A)
-    if (ordem === 'etiqueta_asc' || ordem === 'etiqueta_desc') {
-      const cmp = (a.etiqueta || '').localeCompare(b.etiqueta || '', 'pt-BR', { sensitivity: 'base' });
-      if (cmp !== 0) {
-        return ordem === 'etiqueta_asc' ? cmp : -cmp;
+    if (campo === 'data') {
+      isActive = ordem === 'recente' || ordem === 'antigo';
+      isAsc = ordem === 'antigo';
+    } else if (campo === 'nome') {
+      isActive = ordem === 'nome_asc' || ordem === 'nome_desc';
+      isAsc = ordem === 'nome_asc';
+    } else if (campo === 'classificacao') {
+      isActive = ordem === 'classificacao_asc' || ordem === 'classificacao_desc';
+      isAsc = ordem === 'classificacao_asc';
+    } else if (campo === 'etiqueta') {
+      isActive = ordem === 'etiqueta_asc' || ordem === 'etiqueta_desc';
+      isAsc = ordem === 'etiqueta_asc';
+    } else if (campo === 'parcelas') {
+      isActive = ordem === 'parcelas_asc' || ordem === 'parcelas_desc';
+      isAsc = ordem === 'parcelas_asc';
+    } else if (campo === 'valor') {
+      isActive = ordem === 'valor_desc' || ordem === 'valor_asc';
+      isAsc = ordem === 'valor_asc';
+    }
+
+    if (!isActive) {
+      return (
+        <span
+          style={{
+            opacity: 0.25,
+            fontSize: '9px',
+            marginLeft: '4px',
+            display: 'inline-block',
+            verticalAlign: 'middle',
+          }}
+        >
+          ⇅
+        </span>
+      );
+    }
+
+    return (
+      <span
+        style={{
+          color: 'var(--accent-color, #ffe192)',
+          fontSize: '9px',
+          marginLeft: '4px',
+          fontWeight: 'bold',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+        }}
+      >
+        {isAsc ? '▲' : '▼'}
+      </span>
+    );
+  };
+
+  // Aplicação da Ordenação Completa e Confiável
+  const transacoesOrdenadas = useMemo(() => {
+    return [...transacoesFiltradasPelaBusca].sort((a, b) => {
+      // 1. Ordenação por Data (Mais Recente / Mais Antigo)
+      if (ordem === 'recente') {
+        const timeA = a.data_transacao ? new Date(a.data_transacao).getTime() : 0;
+        const timeB = b.data_transacao ? new Date(b.data_transacao).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || 0) - (a.id || 0);
       }
-      // Dentro da mesma etiqueta, parcelados e recorrentes vêm primeiro!
-      if (aSpec !== bSpec) return aSpec - bSpec;
-      return new Date(b.data_transacao || 0) - new Date(a.data_transacao || 0);
-    }
-
-    // Ordenação por Nome (A-Z ou Z-A)
-    if (ordem === 'nome_asc' || ordem === 'nome_desc') {
-      const cmp = (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
-      if (cmp !== 0) {
-        return ordem === 'nome_asc' ? cmp : -cmp;
+      if (ordem === 'antigo') {
+        const timeA = a.data_transacao ? new Date(a.data_transacao).getTime() : 0;
+        const timeB = b.data_transacao ? new Date(b.data_transacao).getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.id || 0) - (b.id || 0);
       }
-      // Dentro do mesmo nome, parcelados e recorrentes vêm primeiro!
-      if (aSpec !== bSpec) return aSpec - bSpec;
-      return new Date(b.data_transacao || 0) - new Date(a.data_transacao || 0);
-    }
 
-    // Para todas as outras opções de ordenação (Recente, Antigo, Maior Valor, Menor Valor):
-    // Parcelados e Recorrentes sempre vêm PRIMEIRO no topo da lista!
-    if (aSpec !== bSpec) {
-      return aSpec - bSpec;
-    }
+      // 2. Ordenação por Valor (Maior / Menor)
+      if (ordem === 'valor_desc') {
+        const diff = Number(b.valor || 0) - Number(a.valor || 0);
+        if (diff !== 0) return diff;
+        return (b.data_transacao ? new Date(b.data_transacao).getTime() : 0) - (a.data_transacao ? new Date(a.data_transacao).getTime() : 0);
+      }
+      if (ordem === 'valor_asc') {
+        const diff = Number(a.valor || 0) - Number(b.valor || 0);
+        if (diff !== 0) return diff;
+        return (b.data_transacao ? new Date(b.data_transacao).getTime() : 0) - (a.data_transacao ? new Date(a.data_transacao).getTime() : 0);
+      }
 
-    if (ordem === 'recente') {
-      return new Date(b.data_transacao || 0) - new Date(a.data_transacao || 0);
-    }
-    if (ordem === 'antigo') {
-      return new Date(a.data_transacao || 0) - new Date(b.data_transacao || 0);
-    }
-    if (ordem === 'valor_desc') {
-      return Number(b.valor || 0) - Number(a.valor || 0);
-    }
-    if (ordem === 'valor_asc') {
-      return Number(a.valor || 0) - Number(b.valor || 0);
-    }
-    return 0;
-  });
+      // 3. Ordenação por Nome (A-Z / Z-A)
+      if (ordem === 'nome_asc' || ordem === 'nome_desc') {
+        const cmp = (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
+        if (cmp !== 0) return ordem === 'nome_asc' ? cmp : -cmp;
+        return (b.data_transacao ? new Date(b.data_transacao).getTime() : 0) - (a.data_transacao ? new Date(a.data_transacao).getTime() : 0);
+      }
+
+      // 4. Ordenação por Classificação (A-Z / Z-A)
+      if (ordem === 'classificacao_asc' || ordem === 'classificacao_desc') {
+        const cmp = (a.classificacao || '').localeCompare(b.classificacao || '', 'pt-BR', { sensitivity: 'base' });
+        if (cmp !== 0) return ordem === 'classificacao_asc' ? cmp : -cmp;
+        return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
+      }
+
+      // 5. Ordenação por Etiqueta (A-Z / Z-A)
+      if (ordem === 'etiqueta_asc' || ordem === 'etiqueta_desc') {
+        const cmp = (a.etiqueta || '').localeCompare(b.etiqueta || '', 'pt-BR', { sensitivity: 'base' });
+        if (cmp !== 0) return ordem === 'etiqueta_asc' ? cmp : -cmp;
+        return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
+      }
+
+      // 6. Ordenação por Parcelas / Recorrência
+      if (ordem === 'parcelas_asc' || ordem === 'parcelas_desc') {
+        const getParcelaScore = (item) => {
+          if (item.eh_fixa === 1 || item.parcelas === 'Fixa') return 9999;
+          if (!item.parcelas || item.parcelas === '1/1' || item.parcelas === 'À vista') return 0;
+          if (typeof item.parcelas === 'string' && item.parcelas.includes('/')) {
+            const [num, tot] = item.parcelas.split('/');
+            return (parseInt(tot, 10) || 0) * 100 + (parseInt(num, 10) || 0);
+          }
+          return 50;
+        };
+        const scoreA = getParcelaScore(a);
+        const scoreB = getParcelaScore(b);
+        if (scoreA !== scoreB) {
+          return ordem === 'parcelas_asc' ? scoreA - scoreB : scoreB - scoreA;
+        }
+        return (b.data_transacao ? new Date(b.data_transacao).getTime() : 0) - (a.data_transacao ? new Date(a.data_transacao).getTime() : 0);
+      }
+
+      return 0;
+    });
+  }, [transacoesFiltradasPelaBusca, ordem]);
 
   // Agrupamento Inteligente de Compras Parceladas e Gastos Recorrentes quando mesSelecionado === 'Todos'
   const itemsProcessados = useMemo(() => {
@@ -316,8 +412,8 @@ export default function TransactionTable() {
         flex: 1,
         width: '100%',
         minWidth: 0,
-        height: '590px',
-        maxHeight: '590px',
+        height: '710px',
+        maxHeight: '710px',
         boxSizing: 'border-box',
         overflow: 'hidden',
       }}
@@ -444,7 +540,7 @@ export default function TransactionTable() {
                   border: '1px solid rgba(255, 225, 146, 0.3)',
                   borderRadius: '12px',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                  width: '185px',
+                  width: '215px',
                   padding: '4px 0',
                 }}
               >
@@ -542,19 +638,115 @@ export default function TransactionTable() {
         </div>
       </div>
 
-      {/* Tabela de Lançamentos com rolagem interna fixa */}
-      <div style={{ overflowY: 'auto', overflowX: 'hidden', height: '505px', maxHeight: '505px', borderRadius: '10px', backgroundColor: 'rgba(0, 0, 0, 0.12)' }}>
+      {/* Tabela de Lançamentos com rolagem interna fixa expandida */}
+      <div style={{ overflowY: 'auto', overflowX: 'hidden', height: '625px', maxHeight: '625px', borderRadius: '10px', backgroundColor: 'rgba(0, 0, 0, 0.12)' }}>
         <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', color: 'var(--text-primary, #ffffff)', textAlign: 'left', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <th style={{ padding: '9px 12px', width: '80px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600', borderTopLeftRadius: '8px', whiteSpace: 'nowrap' }}>Data</th>
-              <th style={{ padding: '9px 12px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>{labelColunaNome}</th>
-              <th style={{ padding: '9px 12px', width: '130px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Classificação</th>
-              <th style={{ padding: '9px 12px', width: '110px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Etiqueta</th>
-              <th style={{ padding: '9px 12px', width: '110px', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>
-                {abaAtiva === 'receitas' ? 'Recorrência' : 'Parcelas'}
+              <th
+                onClick={() => handleHeaderSort('data')}
+                title="Clique para ordenar por Data"
+                style={{
+                  padding: '9px 12px',
+                  width: '80px',
+                  color: (ordem === 'recente' || ordem === 'antigo') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  borderTopLeftRadius: '8px',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Data {renderSortIcon('data')}
               </th>
-              <th style={{ padding: '9px 12px', width: '130px', textAlign: 'right', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600' }}>Valor</th>
+              <th
+                onClick={() => handleHeaderSort('nome')}
+                title={`Clique para ordenar por ${labelColunaNome}`}
+                style={{
+                  padding: '9px 12px',
+                  color: (ordem === 'nome_asc' || ordem === 'nome_desc') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                {labelColunaNome} {renderSortIcon('nome')}
+              </th>
+              <th
+                onClick={() => handleHeaderSort('classificacao')}
+                title="Clique para ordenar por Classificação"
+                style={{
+                  padding: '9px 12px',
+                  width: '130px',
+                  color: (ordem === 'classificacao_asc' || ordem === 'classificacao_desc') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Classificação {renderSortIcon('classificacao')}
+              </th>
+              <th
+                onClick={() => handleHeaderSort('etiqueta')}
+                title="Clique para ordenar por Etiqueta"
+                style={{
+                  padding: '9px 12px',
+                  width: '110px',
+                  color: (ordem === 'etiqueta_asc' || ordem === 'etiqueta_desc') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Etiqueta {renderSortIcon('etiqueta')}
+              </th>
+              <th
+                onClick={() => handleHeaderSort('parcelas')}
+                title={`Clique para ordenar por ${abaAtiva === 'receitas' ? 'Recorrência' : 'Parcelas'}`}
+                style={{
+                  padding: '9px 12px',
+                  width: '110px',
+                  color: (ordem === 'parcelas_asc' || ordem === 'parcelas_desc') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                {abaAtiva === 'receitas' ? 'Recorrência' : 'Parcelas'} {renderSortIcon('parcelas')}
+              </th>
+              <th
+                onClick={() => handleHeaderSort('valor')}
+                title="Clique para ordenar por Valor"
+                style={{
+                  padding: '9px 12px',
+                  width: '130px',
+                  textAlign: 'right',
+                  color: (ordem === 'valor_desc' || ordem === 'valor_asc') ? 'var(--accent-color, #ffe192)' : '#9e9e9e',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Valor {renderSortIcon('valor')}
+              </th>
               <th style={{ padding: '9px 8px', width: '110px', textAlign: 'center', color: '#9e9e9e', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: '600', borderTopRightRadius: '8px' }}></th>
             </tr>
           </thead>
