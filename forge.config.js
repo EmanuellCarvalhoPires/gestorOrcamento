@@ -4,6 +4,9 @@ const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 const extraResources = ['./images'];
+if (fs.existsSync(path.resolve(__dirname, '.env'))) {
+  extraResources.push('./.env');
+}
 if (fs.existsSync(path.resolve(__dirname, 'ssh-key-2026-07-30.key'))) {
   extraResources.push('./ssh-key-2026-07-30.key');
 }

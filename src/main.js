@@ -19,14 +19,18 @@ import { initAutoUpdater, registerUpdaterIpc } from './services/updaterService.j
 const { Pool } = pg;
 
 // Carrega as variáveis do .env de múltiplos caminhos possíveis (desenvolvimento e build de produção)
+const appDir = typeof app?.getAppPath === 'function' ? app.getAppPath() : '';
 const envPaths = [
   path.resolve(process.cwd(), '.env'),
   path.join(process.resourcesPath || '', '.env'),
+  path.join(process.resourcesPath || '', 'app', '.env'),
+  path.join(appDir, '.env'),
+  path.join(appDir, '..', '.env'),
   path.join(__dirname, '..', '.env'),
 ];
 
 for (const p of envPaths) {
-  if (fs.existsSync(p)) {
+  if (p && fs.existsSync(p)) {
     dotenv.config({ path: p });
   }
 }
