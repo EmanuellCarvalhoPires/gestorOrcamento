@@ -36,6 +36,33 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare Production Environment
+        shell: bash
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          PG_HOST: ${{ secrets.PG_HOST }}
+          PG_PORT: ${{ secrets.PG_PORT }}
+          PG_DATABASE: ${{ secrets.PG_DATABASE }}
+          PG_USER: ${{ secrets.PG_USER }}
+          PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+        run: |
+          echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-1023898773119-enta4pjoekg51vlbbvrhgi8i0e7f71eq.apps.googleusercontent.com}" >> .env
+          if [ -n "$GOOGLE_CLIENT_SECRET" ]; then echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .env; fi
+          if [ -n "$SMTP_HOST" ]; then echo "SMTP_HOST=$SMTP_HOST" >> .env; fi
+          if [ -n "$SMTP_PORT" ]; then echo "SMTP_PORT=$SMTP_PORT" >> .env; fi
+          if [ -n "$SMTP_USER" ]; then echo "SMTP_USER=$SMTP_USER" >> .env; fi
+          if [ -n "$SMTP_PASS" ]; then echo "SMTP_PASS=$SMTP_PASS" >> .env; fi
+          if [ -n "$PG_HOST" ]; then echo "PG_HOST=$PG_HOST" >> .env; fi
+          if [ -n "$PG_PORT" ]; then echo "PG_PORT=$PG_PORT" >> .env; fi
+          if [ -n "$PG_DATABASE" ]; then echo "PG_DATABASE=$PG_DATABASE" >> .env; fi
+          if [ -n "$PG_USER" ]; then echo "PG_USER=$PG_USER" >> .env; fi
+          if [ -n "$PG_PASSWORD" ]; then echo "PG_PASSWORD=$PG_PASSWORD" >> .env; fi
+
       - name: Build Electron App Bundles
         run: npm run build
 
