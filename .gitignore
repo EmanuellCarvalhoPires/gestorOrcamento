@@ -14,6 +14,8 @@ out/
 .webpack/
 *.tsbuildinfo
 *.blockmap
+*.asar
+app.asar
 latest.yml
 latest-*.yml
 

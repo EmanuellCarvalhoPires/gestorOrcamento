@@ -38,8 +38,8 @@ const codigosVerificacao = new Map();
 function criarTransporterNodemailer() {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpUser = process.env.SMTP_USER || 'gestororc@gmail.com';
-  const smtpPass = process.env.SMTP_PASS || 'cvfeowfdngseznfi';
+  const smtpUser = process.env.SMTP_USER || '';
+  const smtpPass = process.env.SMTP_PASS || '';
 
   if (!smtpUser || !smtpPass) {
     return null;
@@ -1175,8 +1175,16 @@ async function realizarOAuth2Google(clientId, clientSecret) {
 // IPC Handler do Login via Google
 ipcMain.handle('login-google', async (event, { perfilUso = 'individual' } = {}) => {
   try {
-    const clientId = process.env.GOOGLE_CLIENT_ID || '1023898773119-lpvurepidkav2h4s4opgpqvsjkj26j3d.apps.googleusercontent.com';
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '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';
+    const clientId = process.env.GOOGLE_CLIENT_ID || '';
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+
+    if (!clientId || !clientSecret) {
+      registrarLogInstalacao('⚠️ Credenciais do Google OAuth não configuradas no ambiente (.env).');
+      return {
+        success: false,
+        error: 'Credenciais do Google OAuth (GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET) não estão configuradas.',
+      };
+    }
 
     const googleProfile = await realizarOAuth2Google(clientId, clientSecret);
 

@@ -14,7 +14,7 @@
   - Interface do usuário: [`src/components/AuthView.jsx`](file:///c:/Users/Trabalho/Documents/gestorOrcamento/src/components/AuthView.jsx)
   - Preload IPC: [`src/preload.js`](file:///c:/Users/Trabalho/Documents/gestorOrcamento/src/preload.js) (`loginGoogle`)
   - Processo Principal Electron: [`src/main.js`](file:///c:/Users/Trabalho/Documents/gestorOrcamento/src/main.js)
-  - Configuração de credenciais: [`client_secret_*.json`](file:///c:/Users/Trabalho/Documents/gestorOrcamento/client_secret_1023898773119-lpvurepidkav2h4s4opgpqvsjkj26j3d.apps.googleusercontent.com.json)
+  - Configuração de credenciais seguras: Variáveis de ambiente no `.env` (`GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`).
 
 ## 2. Impacto no Banco de Dados
 - **Altera o banco de dados?** Sim (em novos cadastros via Google).
@@ -32,4 +32,5 @@
 ## 3. Histórico de Versões e Modificações
 | Versão | Data | Autor / Agente | O que foi modificado / Adicionado |
 | :--- | :--- | :--- | :--- |
+| `v1.1.0` | 2026-09-01 | Antigravity AI | Remediação de segurança: remoção completa de Client Secrets hardcoded no código e no `app.asar`, desrastreamento de binários do Git e obrigatoriedade de carregamento estrito via `.env`. |
 | `v1.0.0` | 2026-08-17 | Antigravity AI | Documentação do fluxo completo OAuth 2.0 loopback local com Google APIs e auto-provisionamento de conta. |
