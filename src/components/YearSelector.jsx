@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useBudget } from '../contexts/BudgetContext';
 
-const STORAGE_KEY = 'flowly_anos_lista';
+const STORAGE_KEY = 'simple_finances_anos_lista';
+const LEGACY_STORAGE_KEY = 'flowly_anos_lista';
 const DEFAULT_ANOS = ['2024', '2025', '2026', '2027'];
 
 export default function YearSelector() {
@@ -14,7 +15,7 @@ export default function YearSelector() {
   // Inicializa a lista a partir do localStorage ou da lista padrão
   const [anosLocais, setAnosLocais] = useState(() => {
     try {
-      const salvo = localStorage.getItem(STORAGE_KEY);
+      const salvo = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
       if (salvo) {
         const parsed = JSON.parse(salvo);
         if (Array.isArray(parsed) && parsed.length > 0) {
