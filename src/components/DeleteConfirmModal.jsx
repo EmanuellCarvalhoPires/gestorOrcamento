@@ -23,12 +23,14 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 2000,
+        backdropFilter: 'blur(2px)',
       }}
     >
       <div
         style={{
-          backgroundColor: '#545454',
+          backgroundColor: 'var(--card-bg, #545454)',
           borderRadius: '24px',
+          border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
           padding: '28px 32px',
           width: '90%',
           maxWidth: '460px',
@@ -36,12 +38,13 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
           flexDirection: 'column',
           alignItems: 'center',
           gap: '18px',
-          boxShadow: '0 12px 36px rgba(0,0,0,0.6)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
           textAlign: 'center',
+          color: 'var(--text-primary, #ffffff)',
         }}
       >
         {/* Pergunta Principal */}
-        <h3 style={{ margin: 0, color: '#ffffff', fontSize: '19px', fontWeight: 'bold', lineHeight: '1.4' }}>
+        <h3 style={{ margin: 0, color: 'var(--text-primary, #ffffff)', fontSize: '19px', fontWeight: 'bold', lineHeight: '1.4' }}>
           {isFixa
             ? `Opções de exclusão para "${item.nome}" (Registro Fixo)`
             : (totalParcelasNum > 1
@@ -50,7 +53,7 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
         </h3>
 
         {isMultiplas && (
-          <p style={{ margin: 0, color: '#dddddd', fontSize: '13px' }}>
+          <p style={{ margin: 0, color: 'var(--text-secondary, #cccccc)', fontSize: '13px', lineHeight: '1.5' }}>
             {isFixa
               ? 'Este registro foi marcado como Fixo. Como deseja realizar a exclusão?'
               : `Esta compra foi parcelada em ${totalParcelasNum} vezes. Como deseja realizar a exclusão?`}
@@ -73,13 +76,15 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 1 para Fixa: APENAS este mês */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'apenas_esta', ehFixa: true, mes: item.mes })}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.1))')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-bg, #3e3e3e)')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
-                  border: 'none',
-                  backgroundColor: '#737373',
-                  color: '#ffffff',
+                  border: '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--text-primary, #ffffff)',
                   fontWeight: '600',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -92,17 +97,19 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 2 para Fixa: Este mês em diante */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'posteriores', ehFixa: true, mes: item.mes })}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
                   border: 'none',
-                  backgroundColor: '#ffe192',
-                  color: '#333333',
+                  backgroundColor: 'var(--accent-color, #ffe192)',
+                  color: 'var(--accent-text, #333333)',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                   transition: 'opacity 0.2s',
                 }}
               >
@@ -112,13 +119,15 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 3 para Fixa: TODAS as ocorrências do ano */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'todas', ehFixa: true, mes: item.mes })}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.1))')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-bg, #3e3e3e)')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
-                  border: 'none',
-                  backgroundColor: '#4a4a4a',
-                  color: '#ffe192',
+                  border: '1px solid var(--accent-color, #ffe192)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--accent-color, #ffe192)',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -132,14 +141,17 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Cancelar */}
               <button
                 onClick={onClose}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary, #ffffff)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary, #aaaaaa)')}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#aaaaaa',
+                  color: 'var(--text-secondary, #aaaaaa)',
                   fontSize: '13px',
                   cursor: 'pointer',
                   marginTop: '4px',
                   textDecoration: 'underline',
+                  transition: 'color 0.2s',
                 }}
               >
                 Cancelar
@@ -150,13 +162,15 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 1 para Parcelados: APENAS esta parcela */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'apenas_esta' })}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.1))')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-bg, #3e3e3e)')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
-                  border: 'none',
-                  backgroundColor: '#737373',
-                  color: '#ffffff',
+                  border: '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--text-primary, #ffffff)',
                   fontWeight: '600',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -169,17 +183,19 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 2 para Parcelados: Esta parcela e as futuras */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'posteriores', parcelaNum })}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
                   border: 'none',
-                  backgroundColor: '#ffe192',
-                  color: '#333333',
+                  backgroundColor: 'var(--accent-color, #ffe192)',
+                  color: 'var(--accent-text, #333333)',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                   transition: 'opacity 0.2s',
                 }}
               >
@@ -189,13 +205,15 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Opção 3 para Parcelados: TODAS as parcelas */}
               <button
                 onClick={() => onConfirm({ deletarModo: 'todas' })}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.1))')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-bg, #3e3e3e)')}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '24px',
-                  border: 'none',
-                  backgroundColor: '#4a4a4a',
-                  color: '#ffe192',
+                  border: '1px solid var(--accent-color, #ffe192)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--accent-color, #ffe192)',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -209,14 +227,17 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
               {/* Cancelar */}
               <button
                 onClick={onClose}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary, #ffffff)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary, #aaaaaa)')}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#aaaaaa',
+                  color: 'var(--text-secondary, #aaaaaa)',
                   fontSize: '13px',
                   cursor: 'pointer',
                   marginTop: '4px',
                   textDecoration: 'underline',
+                  transition: 'color 0.2s',
                 }}
               >
                 Cancelar
@@ -226,16 +247,20 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
             <>
               <button
                 onClick={() => onConfirm({ deletarModo: 'apenas_esta' })}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
                 style={{
                   flex: 1,
                   padding: '12px',
                   borderRadius: '24px',
                   border: 'none',
-                  backgroundColor: '#ffe192',
-                  color: '#333333',
+                  backgroundColor: 'var(--accent-color, #ffe192)',
+                  color: 'var(--accent-text, #333333)',
                   fontWeight: 'bold',
                   fontSize: '16px',
                   cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                  transition: 'opacity 0.2s',
                 }}
               >
                 Sim
@@ -243,16 +268,19 @@ export default function DeleteConfirmModal({ isOpen, item, onClose, onConfirm })
 
               <button
                 onClick={onClose}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.1))')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-bg, #3e3e3e)')}
                 style={{
                   flex: 1,
                   padding: '12px',
                   borderRadius: '24px',
-                  border: 'none',
-                  backgroundColor: '#737373',
-                  color: '#ffffff',
+                  border: '1px solid var(--border-color, #737373)',
+                  backgroundColor: 'var(--surface-bg, #3e3e3e)',
+                  color: 'var(--text-primary, #ffffff)',
                   fontWeight: 'bold',
                   fontSize: '16px',
                   cursor: 'pointer',
+                  transition: 'background-color 0.2s',
                 }}
               >
                 Não
